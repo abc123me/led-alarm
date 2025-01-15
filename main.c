@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <getopt.h>
+#include <math.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -24,8 +25,8 @@
 #define LED_COUNT          50
 
 #define BEGIN_RAMP_UP_TIME 5
-#define RAMP_UP_DURATION   3  // 5-7AM getting brighter
-#define KEEP_ON_DURATION   2  // 8-10AM max brightness
+#define RAMP_UP_DURATION_M (3 * 60)  // 5-7AM getting brighter
+#define KEEP_ON_DURATION_M 30        // 8-10AM max brightness
 // and now off
 
 int led_count = LED_COUNT;
@@ -166,63 +167,74 @@ int main(int argc, char* argv[]) {
 		return ret;
 	}
 
-	struct tm tm_struct;
-	int hour = BEGIN_RAMP_UP_TIME - 1, min = 50, sec = 0;
+#ifdef FAKE_TIME
+	int fake_min = 0;
+#endif
+
+	struct tm tms;
 	while (running) {
+		/* get the time */
 		time_t now = time(NULL);
-		localtime_r(&now, &tm_struct);
-		// int hour = tm_struct.tm_hour;
-		// int min = tm_struct.tm_min;
-		// int sec = tm_struct.tm_sec;
-		min++;
-		if (min > 60) {
-			hour++;
-			min = 0;
+		localtime_r(&now, &tms);
+		int hour = tms.tm_hour;
+		int min = tms.tm_min;
+
+#ifdef FAKE_TIME
+		if (fake_min) {
+			hour = fake_min / 60 + BEGIN_RAMP_UP_TIME;
+			min = fake_min % 60;
+			if (fake_min > RAMP_UP_DURATION_M + KEEP_ON_DURATION_M)
+				fake_min = 0;
 		}
-		if (hour > BEGIN_RAMP_UP_TIME + RAMP_UP_DURATION + KEEP_ON_DURATION) {
-			hour = BEGIN_RAMP_UP_TIME - 1;
-			min = 50;
-		}
-		int color = 0x000000;
-		// hour = 6;
-		// int minute = tm_struct.tm_min;
-		color = 0;
-		int oh = hour;
+#endif
+
+		/* update the leds */
 		if (hour >= BEGIN_RAMP_UP_TIME) {  // Start at 5AM
-			hour -= BEGIN_RAMP_UP_TIME;
 
-			int cur_mins = hour * 60 + min; /* minutes past 5AM */
-			int max_mins = RAMP_UP_DURATION * 60;
+			/* calculate time crap */
+			int cur_mins =
+				(hour - BEGIN_RAMP_UP_TIME) * 60 + min; /* minutes past 5AM */
+			int max_mins = RAMP_UP_DURATION_M;
 
+			/* seed the color calculation */
 			float w;
-			if (cur_mins > max_mins + KEEP_ON_DURATION * 60)
+			if (cur_mins > max_mins + KEEP_ON_DURATION_M)
 				w = 0.0f;
 			else if (cur_mins > max_mins)
 				w = 1.0f;
 			else
 				w = cur_mins / ((float)max_mins);
 
+			/* calculate the color using some polynomial bs */
 			float wg = 0.7 - ((1 - w) * 0.6f);
 			float wb = 0.3 - ((1 - w) * 0.25f);
-			printf("%d:%d:%d %.1f %.1f\n", hour, min, sec, wg, wb);
+
+#ifdef FAKE_TIME
+			printf("%d:%d:%d %.1f %.1f\n", hour, min, 0, wg, wb);
+#endif
+
+			int color = 0;
 			color |= (int)round(w * 1.0f * 255) << 16;
 			color |= (int)round(w * wg * 255) << 8;
 			color |= (int)round(w * wg * 255);
-		}
-		hour = oh;
 
-		for (int i = 0; i < led_count; i++)
-			leds[i] = color;
-		for (int i = 0; i < led_count; i++)
-			ledstring.channel[0].leds[i] = leds[i];
-		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
-			fprintf(stderr, "ws2811_render failed: %s\n",
-			        ws2811_get_return_t_str(ret));
-			break;
+			/* update the leds */
+			for (int i = 0; i < led_count; i++)
+				leds[i] = color;
+			for (int i = 0; i < led_count; i++)
+				ledstring.channel[0].leds[i] = leds[i];
+			if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+				fprintf(stderr, "ws2811_render failed: %s\n",
+				        ws2811_get_return_t_str(ret));
+				break;
+			}
 		}
-
-		for (int i = 0; i < 1; i++)
-			usleep(50000);  // usleep(1000000);
+#ifdef FAKE_TIME
+		fake_min++;
+		usleep(25000);
+#else
+		usleep(10000000);
+#endif
 	}
 
 	/* clear the leds */
