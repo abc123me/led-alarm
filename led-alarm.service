@@ -10,6 +10,7 @@ ReloadSignal=SIGINFO
 User=root
 Group=root
 Type=simple
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
