@@ -1,0 +1,15 @@
+[Unit]
+Description=LED Alarm service
+After=time-sync.target
+
+[Service]
+ExecStart=/home/jeremiah/led_alarm/main
+StopSignal=SIGINT
+KillSignal=SIGKILL
+ReloadSignal=SIGINFO
+User=root
+Group=root
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
