@@ -22,7 +22,7 @@
 #define GPIO_PIN           18
 #define DMA                10
 #define STRIP_TYPE         WS2811_STRIP_RGB
-#define LED_COUNT          50
+#define LED_COUNT          80
 
 #define BEGIN_RAMP_UP_TIME 5
 #define RAMP_UP_DURATION_M (3 * 60)  // 5-7AM getting brighter
@@ -166,6 +166,13 @@ int main(int argc, char* argv[]) {
 		        ws2811_get_return_t_str(ret));
 		return ret;
 	}
+	for (int i = 0; i < led_count; i++)
+		ledstring.channel[0].leds[i] = 0;
+	if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+		fprintf(stderr, "ws2811_render failed: %s\n",
+		        ws2811_get_return_t_str(ret));
+		return -1;
+	}
 
 #ifdef FAKE_TIME
 	int fake_min = 0;
@@ -187,7 +194,6 @@ int main(int argc, char* argv[]) {
 				fake_min = 0;
 		}
 #endif
-
 		/* update the leds */
 		if (hour >= BEGIN_RAMP_UP_TIME) {  // Start at 5AM
 
