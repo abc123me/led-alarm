@@ -1,6 +1,7 @@
 [Unit]
 Description=LED Alarm service
-After=time-sync.target
+Requires=network.target
+After=systemd-timesyncd.service
 
 [Service]
 ExecStart=/home/jeremiah/led_alarm/main

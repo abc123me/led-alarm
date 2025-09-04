@@ -24,9 +24,9 @@
 #define STRIP_TYPE         WS2811_STRIP_RGB
 #define LED_COUNT          80
 
-#define BEGIN_RAMP_UP_TIME 5
-#define RAMP_UP_DURATION_M (3 * 60)  // 5-7AM getting brighter
-#define KEEP_ON_DURATION_M 30        // 8-10AM max brightness
+#define BEGIN_RAMP_UP_TIME 6         // 6AM - ramp up start time in hours
+#define RAMP_UP_DURATION_M (2 * 60)  // 2HR - how long should it ramp up
+#define KEEP_ON_DURATION_M 60        // 1HR - how long after ramp up to keep on
 // and now off
 
 int led_count = LED_COUNT;
@@ -166,13 +166,6 @@ int main(int argc, char* argv[]) {
 		        ws2811_get_return_t_str(ret));
 		return ret;
 	}
-	for (int i = 0; i < led_count; i++)
-		ledstring.channel[0].leds[i] = 0;
-	if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
-		fprintf(stderr, "ws2811_render failed: %s\n",
-		        ws2811_get_return_t_str(ret));
-		return -1;
-	}
 
 #ifdef FAKE_TIME
 	int fake_min = 0;
@@ -227,27 +220,30 @@ int main(int argc, char* argv[]) {
 			/* update the leds */
 			for (int i = 0; i < led_count; i++)
 				leds[i] = color;
+		} else {
 			for (int i = 0; i < led_count; i++)
-				ledstring.channel[0].leds[i] = leds[i];
-			if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
-				fprintf(stderr, "ws2811_render failed: %s\n",
-				        ws2811_get_return_t_str(ret));
-				break;
-			}
+				leds[i] = 0;
+		}
+
+		/* Render whatever colors in the buffer */
+		for (int i = 0; i < led_count; i++)
+			ledstring.channel[0].leds[i] = leds[i];
+		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+			fprintf(stderr, "ws2811_render failed: %s\n",
+			        ws2811_get_return_t_str(ret));
+			break;
 		}
 #ifdef FAKE_TIME
 		fake_min++;
 		usleep(25000);
 #else
-		usleep(10000000);
+		usleep(2500000);
 #endif
 	}
 
 	/* clear the leds */
 	for (int i = 0; i < led_count; i++)
-		leds[i] = 0;
-	for (int i = 0; i < led_count; i++)
-		ledstring.channel[0].leds[i] = leds[i];
+		ledstring.channel[0].leds[i] = leds[i] = 0;
 	ws2811_render(&ledstring);
 
 	/* finalize */
