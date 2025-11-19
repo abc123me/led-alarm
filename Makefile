@@ -4,7 +4,7 @@ LIBS=$(shell pkg-config --libs $(PKGS)) -lm
 OBJS=args.o
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(PKG_CFLAGS) $(CFLAGS) -c $< -o $@
 
 main: main.c $(OBJS)
 	$(CC) $(PKG_CFLAGS) $(CFLAGS) $(LIBS) $(OBJS) main.c -o main
