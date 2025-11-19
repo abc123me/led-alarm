@@ -1,11 +1,13 @@
+PKGS=libws2811
+PKG_CFLAGS=$(shell pkg-config --cflags $(PKGS))
+LIBS=$(shell pkg-config --libs $(PKGS)) -lm
 OBJS=
-CC=gcc
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-main: main.c
-	$(CC) $(CFLAGS)  $(LIBS) $(OBJS) -I rpi_ws281x/ main.c -o main rpi_ws281x/build/libws2811.a -lm
+main: main.c $(OBJS)
+	$(CC) $(PKG_CFLAGS) $(CFLAGS) $(LIBS) $(OBJS) main.c -o main
 
 all:	main
 
