@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "ws2811.h"
 
@@ -28,6 +29,12 @@
 #define KEEP_ON_DURATION_M 60  // 1HR - how long after ramp up to keep on
 #define BEGIN_SHUTOFF_TIME (BEGIN_RAMP_UP_TIME + RAMP_UP_DURATION_M + KEEP_ON_DURATION_M)
 // and now off
+
+#define FLAG_RUN_MAIN_LOOP 0b00000001
+#define FLAG_RELOAD_CONFIG 0b00000010
+#define FLAGS_DEFAULT      0b00000011
+
+#define FAKE_TIME_WINDOW   20
 
 ws2811_t ledstring = {
 	.freq = TARGET_FREQ,
@@ -52,13 +59,19 @@ ws2811_t ledstring = {
 		},
 };
 
-static uint8_t running = 1;
+static uint8_t flags = FLAGS_DEFAULT;
+static pthread_mutex_t flags_mutex;
 
 int parseargs(int argc, char** argv, ws2811_t* ws2811);
+int calc_color(int min);
 static void on_interrupt(int signum);
 
 int main(int argc, char* argv[]) {
-	int ret;
+	int i, ret, cur_min;
+	struct tm tms;
+	time_t now;
+
+	pthread_mutex_init(&flags_mutex, NULL);
 
 	ret = parseargs(argc, argv, &ledstring);
 	if(ret) {
@@ -70,7 +83,8 @@ int main(int argc, char* argv[]) {
 	if (!leds)
 		return 1;
 
-	signal(SIGINT, on_interrupt);
+	signal(SIGINT,  on_interrupt); /* Terminates gracefully */
+	signal(SIGUSR1, on_interrupt); /* Reloads configuration */
 
 	if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS) {
 		fprintf(stderr, "ws2811_init failed: %s\n",
@@ -78,24 +92,37 @@ int main(int argc, char* argv[]) {
 		return ret;
 	}
 
-#ifdef FAKE_TIME
-	int fake_min = 0;
-#endif
-
-	struct tm tms;
-	while (running) {
+	while (1) {
 		int color = 0;
-		/* get the time */
-		time_t now = time(NULL);
-		localtime_r(&now, &tms);
-		int cur_min = tms.tm_hour * 60 + tms.tm_min;
+
+		pthread_mutex_lock(&flags_mutex);
+		/* exit main loop if ordered */
+		if(flags & FLAG_RUN_MAIN_LOOP == 0)
+			break;
+
+		/* check if the config file needs loaded */
+		if(flags & FLAG_RELOAD_CONFIG) {
+			printf("Loading config from %s\n", "/etc/led-alarm.conf");
+			puts("TODO");
+			printf("Loaded config from %s\n", "/etc/led-alarm.conf");
+			flags &= ~FLAG_RELOAD_CONFIG;
+		}
+		pthread_mutex_unlock(&flags_mutex);
 
 #ifdef FAKE_TIME
-		if (fake_min) {
-			cur_min = fake_min;
-		}
+		/* make up a time */
+		if(cur_min > BEGIN_SHUTOFF_TIME + FAKE_TIME_WINDOW || \
+		   cur_min < BEGIN_RAMP_UP_TIME - FAKE_TIME_WINDOW)
+			cur_min = BEGIN_RAMP_UP_TIME - FAKE_TIME_WINDOW;
+		else cur_min++;
+#else
+		/* get the time */
+		now = time(NULL);
+		localtime_r(&now, &tms);
+		cur_min = tms.tm_hour * 60 + tms.tm_min;
 #endif
-		/* update the leds */
+
+		/* update the leds, default to black */
 		if (cur_min >= BEGIN_RAMP_UP_TIME && cur_min < BEGIN_SHUTOFF_TIME) {
 			float w, wg, wb;
 
@@ -109,21 +136,18 @@ int main(int argc, char* argv[]) {
 			/* calculate the color using some polynomial bs */
 			wg = 0.7 - ((1 - w) * 0.6f);
 			wb = 0.3 - ((1 - w) * 0.25f);
-
 			color |= (int)round(w * 1.0f * 255) << 16;
 			color |= (int)round(w * wg * 255) << 8;
 			color |= (int)round(w * wg * 255);
-#ifdef FAKE_TIME
-			printf("%d:%d:%d %.1f %.1f #%08X\n", min / 60, min % 60, 0, wg, wb, color);
-#endif
 		}
 
 		/* Fill the buffer with color */
-		for (int i = 0; i < ledstring.channel[0].count; i++)
+		/* TODO: Throw in some sine wave / perlin noise bs here */
+		for (i = 0; i < ledstring.channel[0].count; i++)
 			leds[i] = color;
 
 		/* Render whatever colors in the buffer */
-		for (int i = 0; i < ledstring.channel[0].count; i++)
+		for (i = 0; i < ledstring.channel[0].count; i++)
 			ledstring.channel[0].leds[i] = leds[i];
 		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
 			fprintf(stderr, "ws2811_render failed: %s\n",
@@ -133,7 +157,7 @@ int main(int argc, char* argv[]) {
 
 		/* and wait a bit */
 #ifdef FAKE_TIME
-		fake_min++;
+		printf("%d:%d:%d %.1f %.1f #%08X\n", min / 60, min % 60, 0, wg, wb, color);
 		usleep(25000);
 #else
 		usleep(1000000);
@@ -153,9 +177,16 @@ int main(int argc, char* argv[]) {
 }
 
 static void on_interrupt(int signum) {
+	pthread_mutex_lock(&flags_mutex);
 	switch(signum) {
+		case SIGUSR1:
+			flags |= FLAG_RELOAD_CONFIG;
+			puts("Interrupt detected, ordering config reload!");
+			break;
 		default:
-			running = 0;
+			flags &= ~FLAG_RUN_MAIN_LOOP;
+			puts("Interrupt detected, exiting!");
 			break;
 	}
+	pthread_mutex_unlock(&flags_mutex);
 }
