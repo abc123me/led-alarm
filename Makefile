@@ -1,7 +1,7 @@
 PKGS=libws2811
 PKG_CFLAGS=$(shell pkg-config --cflags $(PKGS))
 LIBS=$(shell pkg-config --libs $(PKGS)) -lm
-OBJS=
+OBJS=args.o
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

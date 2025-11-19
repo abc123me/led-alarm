@@ -1,5 +1,4 @@
 #include <fcntl.h>
-#include <getopt.h>
 #include <math.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -24,9 +23,10 @@
 #define STRIP_TYPE         WS2811_STRIP_RGB
 #define LED_COUNT          80
 
-#define BEGIN_RAMP_UP_TIME 6         // 6AM - ramp up start time in hours
-#define RAMP_UP_DURATION_M (2 * 60)  // 2HR - how long should it ramp up
-#define KEEP_ON_DURATION_M 60        // 1HR - how long after ramp up to keep on
+#define BEGIN_RAMP_UP_TIME 360 // 6AM - ramp up start time in hours
+#define RAMP_UP_DURATION_M 120 // 2HR - how long should it ramp up
+#define KEEP_ON_DURATION_M 60  // 1HR - how long after ramp up to keep on
+#define BEGIN_SHUTOFF_TIME (BEGIN_RAMP_UP_TIME + RAMP_UP_DURATION_M + KEEP_ON_DURATION_M)
 // and now off
 
 int led_count = LED_COUNT;
@@ -53,102 +53,8 @@ ws2811_t ledstring = {
 		},
 };
 static uint8_t running = 1;
-static void on_interrupt(int signum) {
-	running = 0;
-}
-void parseargs(int argc, char** argv, ws2811_t* ws2811) {
-	int index, c = 0;
-	static struct option longopts[] = {{"help", no_argument, 0, 'h'},
-	                                   {"dma", required_argument, 0, 'd'},
-	                                   {"gpio", required_argument, 0, 'g'},
-	                                   {"invert", no_argument, 0, 'i'},
-	                                   {"strip", required_argument, 0, 's'},
-	                                   {"count", required_argument, 0, 'y'},
-	                                   {"version", no_argument, 0, 'v'},
-	                                   {0, 0, 0, 0}};
-	while (c = getopt_long(argc, argv, "c:d:g:his:v", longopts, &index) >= 0) {
-		switch (c) {
-			case 0:
-				/* handle flag options (array's 3rd field non-0) */
-				break;
-			case 'h':
-				fprintf(stderr,
-				        "Usage: %s \n"
-				        "-h (--help)    - this information\n"
-				        "-s (--strip)   - strip type - rgb, grb, gbr, rgbw "
-				        "(default rgb)\n"
-				        "-c (--count)   - led count (default %d)\n"
-				        "-d (--dma)     - dma channel to use (default %d)\n"
-				        "-g (--gpio)    - GPIO to use\n"
-				        "                 If omitted, default is 18 (PWM0)\n"
-				        "-i (--invert)  - invert pin output (pulse %s)\n",
-				        argv[0], ws2811->channel[0].count, ws2811->dmanum,
-				        ws2811->channel[0].gpionum,
-				        ws2811->channel[0].invert ? "LOW" : "HIGH");
-				exit(-1);
-			case 'D':
-				break;
-			case 'g':
-				if (optarg)
-					ws2811->channel[0].gpionum = atoi(optarg);
-				break;
-			case 'i':
-				ws2811->channel[0].invert = 1;
-				break;
-			case 'd':
-				if (optarg) {
-					int dma = atoi(optarg);
-					if (dma < 14) {
-						ws2811->dmanum = dma;
-					} else {
-						printf("invalid dma %d\n", dma);
-						exit(-1);
-					}
-				}
-				break;
-			case 'c':
-				if (optarg) {
-					led_count = atoi(optarg);
-					if (led_count > 0) {
-						ws2811->channel[0].count = led_count;
-					} else {
-						printf("invalid led count %d\n", led_count);
-						exit(-1);
-					}
-				}
-				break;
-			case 's':
-				if (optarg) {
-					if (!strncasecmp("rgb", optarg, 4)) {
-						ws2811->channel[0].strip_type = WS2811_STRIP_RGB;
-					} else if (!strncasecmp("rbg", optarg, 4)) {
-						ws2811->channel[0].strip_type = WS2811_STRIP_RBG;
-					} else if (!strncasecmp("grb", optarg, 4)) {
-						ws2811->channel[0].strip_type = WS2811_STRIP_GRB;
-					} else if (!strncasecmp("gbr", optarg, 4)) {
-						ws2811->channel[0].strip_type = WS2811_STRIP_GBR;
-					} else if (!strncasecmp("brg", optarg, 4)) {
-						ws2811->channel[0].strip_type = WS2811_STRIP_BRG;
-					} else if (!strncasecmp("bgr", optarg, 4)) {
-						ws2811->channel[0].strip_type = WS2811_STRIP_BGR;
-					} else if (!strncasecmp("rgbw", optarg, 4)) {
-						ws2811->channel[0].strip_type = SK6812_STRIP_RGBW;
-					} else if (!strncasecmp("grbw", optarg, 4)) {
-						ws2811->channel[0].strip_type = SK6812_STRIP_GRBW;
-					} else {
-						printf("invalid strip %s\n", optarg);
-						exit(-1);
-					}
-				}
-				break;
-			case '?':
-				/* getopt_long already reported error? */
-				exit(-1);
-			default:
-				exit(-1);
-		}
-	}
-}
+void parseargs(int argc, char** argv, ws2811_t* ws2811);
+static void on_interrupt(int signum);
 
 int main(int argc, char* argv[]) {
 	ws2811_return_t ret;
@@ -173,57 +79,43 @@ int main(int argc, char* argv[]) {
 
 	struct tm tms;
 	while (running) {
+		int color = 0;
 		/* get the time */
 		time_t now = time(NULL);
 		localtime_r(&now, &tms);
-		int hour = tms.tm_hour;
-		int min = tms.tm_min;
+		int cur_min = tms.tm_hour * 60 + tms.tm_min;
 
 #ifdef FAKE_TIME
 		if (fake_min) {
-			hour = fake_min / 60 + BEGIN_RAMP_UP_TIME;
-			min = fake_min % 60;
-			if (fake_min > RAMP_UP_DURATION_M + KEEP_ON_DURATION_M)
-				fake_min = 0;
+			cur_min = fake_min;
 		}
 #endif
 		/* update the leds */
-		if (hour >= BEGIN_RAMP_UP_TIME) {  // Start at 5AM
-
-			/* calculate time crap */
-			int cur_mins =
-				(hour - BEGIN_RAMP_UP_TIME) * 60 + min; /* minutes past 5AM */
-			int max_mins = RAMP_UP_DURATION_M;
+		if (cur_min >= BEGIN_RAMP_UP_TIME && cur_min < BEGIN_SHUTOFF_TIME) {
+			float w, wg, wb;
 
 			/* seed the color calculation */
-			float w;
-			if (cur_mins > max_mins + KEEP_ON_DURATION_M)
-				w = 0.0f;
-			else if (cur_mins > max_mins)
+			w = (cur_min - BEGIN_RAMP_UP_TIME) / ((float) RAMP_UP_DURATION_M);
+
+			/* make sure to clamp here for keep-on time */
+			if (w > 1.0f)
 				w = 1.0f;
-			else
-				w = cur_mins / ((float)max_mins);
 
 			/* calculate the color using some polynomial bs */
-			float wg = 0.7 - ((1 - w) * 0.6f);
-			float wb = 0.3 - ((1 - w) * 0.25f);
+			wg = 0.7 - ((1 - w) * 0.6f);
+			wb = 0.3 - ((1 - w) * 0.25f);
 
-#ifdef FAKE_TIME
-			printf("%d:%d:%d %.1f %.1f\n", hour, min, 0, wg, wb);
-#endif
-
-			int color = 0;
 			color |= (int)round(w * 1.0f * 255) << 16;
 			color |= (int)round(w * wg * 255) << 8;
 			color |= (int)round(w * wg * 255);
-
-			/* update the leds */
-			for (int i = 0; i < led_count; i++)
-				leds[i] = color;
-		} else {
-			for (int i = 0; i < led_count; i++)
-				leds[i] = 0;
+#ifdef FAKE_TIME
+			printf("%d:%d:%d %.1f %.1f #%08X\n", min / 60, min % 60, 0, wg, wb, color);
+#endif
 		}
+
+		/* Fill the buffer with color */
+		for (int i = 0; i < led_count; i++)
+			leds[i] = color;
 
 		/* Render whatever colors in the buffer */
 		for (int i = 0; i < led_count; i++)
@@ -233,15 +125,17 @@ int main(int argc, char* argv[]) {
 			        ws2811_get_return_t_str(ret));
 			break;
 		}
+
+		/* and wait a bit */
 #ifdef FAKE_TIME
 		fake_min++;
 		usleep(25000);
 #else
-		usleep(2500000);
+		usleep(1000000);
 #endif
 	}
 
-	/* clear the leds */
+	/* clear the leds on exit */
 	for (int i = 0; i < led_count; i++)
 		ledstring.channel[0].leds[i] = leds[i] = 0;
 	ws2811_render(&ledstring);
@@ -251,4 +145,12 @@ int main(int argc, char* argv[]) {
 	ws2811_fini(&ledstring);
 	printf("\n");
 	return ret;
+}
+
+static void on_interrupt(int signum) {
+	switch(signum) {
+		default:
+			running = 0;
+			break;
+	}
 }
