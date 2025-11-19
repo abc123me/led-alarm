@@ -1,10 +1,9 @@
-#include <fcntl.h>
 #include <math.h>
 #include <signal.h>
-#include <stdarg.h>
-#include <stdint.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -13,7 +12,9 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#include "ws2811.h"
+#include <ws2811.h>
+
+#include "config.h"
 
 #define ARRAY_SIZE(stuff) (sizeof(stuff) / sizeof(stuff[0]))
 
@@ -63,11 +64,12 @@ static uint8_t flags = FLAGS_DEFAULT;
 static pthread_mutex_t flags_mutex;
 
 int parseargs(int argc, char** argv, ws2811_t* ws2811);
-int calc_color(int min);
+
 static void on_interrupt(int signum);
 
 int main(int argc, char* argv[]) {
 	int i, ret, cur_min;
+	alarm_config_t cfg;
 	struct tm tms;
 	time_t now;
 
@@ -102,9 +104,7 @@ int main(int argc, char* argv[]) {
 
 		/* check if the config file needs loaded */
 		if(flags & FLAG_RELOAD_CONFIG) {
-			printf("Loading config from %s\n", "/etc/led-alarm.conf");
-			puts("TODO");
-			printf("Loaded config from %s\n", "/etc/led-alarm.conf");
+			(void) try_load_config(&cfg);
 			flags &= ~FLAG_RELOAD_CONFIG;
 		}
 		pthread_mutex_unlock(&flags_mutex);
@@ -183,9 +183,13 @@ static void on_interrupt(int signum) {
 			flags |= FLAG_RELOAD_CONFIG;
 			puts("Interrupt detected, ordering config reload!");
 			break;
+		case SIGINT:
+			puts("User interrupt detected, exiting!");
+			goto sigstop;
 		default:
+			puts("Unknown interrupt detected, exiting!");
+sigstop:
 			flags &= ~FLAG_RUN_MAIN_LOOP;
-			puts("Interrupt detected, exiting!");
 			break;
 	}
 	pthread_mutex_unlock(&flags_mutex);
