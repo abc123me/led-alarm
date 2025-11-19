@@ -29,7 +29,6 @@
 #define BEGIN_SHUTOFF_TIME (BEGIN_RAMP_UP_TIME + RAMP_UP_DURATION_M + KEEP_ON_DURATION_M)
 // and now off
 
-int led_count = LED_COUNT;
 ws2811_t ledstring = {
 	.freq = TARGET_FREQ,
 	.dmanum = DMA,
@@ -52,16 +51,22 @@ ws2811_t ledstring = {
 				},
 		},
 };
+
 static uint8_t running = 1;
-void parseargs(int argc, char** argv, ws2811_t* ws2811);
+
+int parseargs(int argc, char** argv, ws2811_t* ws2811);
 static void on_interrupt(int signum);
 
 int main(int argc, char* argv[]) {
-	ws2811_return_t ret;
+	int ret;
 
-	parseargs(argc, argv, &ledstring);
+	ret = parseargs(argc, argv, &ledstring);
+	if(ret) {
+		fprintf(stderr, "Failed to parse arguments!\n");
+		return ret;
+	}
 
-	ws2811_led_t* leds = malloc(sizeof(ws2811_led_t) * LED_COUNT);
+	ws2811_led_t* leds = malloc(sizeof(ws2811_led_t) * ledstring.channel[0].count);
 	if (!leds)
 		return 1;
 
@@ -114,11 +119,11 @@ int main(int argc, char* argv[]) {
 		}
 
 		/* Fill the buffer with color */
-		for (int i = 0; i < led_count; i++)
+		for (int i = 0; i < ledstring.channel[0].count; i++)
 			leds[i] = color;
 
 		/* Render whatever colors in the buffer */
-		for (int i = 0; i < led_count; i++)
+		for (int i = 0; i < ledstring.channel[0].count; i++)
 			ledstring.channel[0].leds[i] = leds[i];
 		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
 			fprintf(stderr, "ws2811_render failed: %s\n",
@@ -136,7 +141,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	/* clear the leds on exit */
-	for (int i = 0; i < led_count; i++)
+	for (int i = 0; i < ledstring.channel[0].count; i++)
 		ledstring.channel[0].leds[i] = leds[i] = 0;
 	ws2811_render(&ledstring);
 

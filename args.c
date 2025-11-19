@@ -1,10 +1,13 @@
-#include <string.h>
+#include <errno.h>
 #include <getopt.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "ws2811.h"
 
-void parseargs(int argc, char** argv, ws2811_t* ws2811) {
-	int index, c = 0;
+int parseargs(int argc, char** argv, ws2811_t* ws2811) {
+	int tmp, index, c = 0;
 	static struct option longopts[] = {{"help", no_argument, 0, 'h'},
 	                                   {"dma", required_argument, 0, 'd'},
 	                                   {"gpio", required_argument, 0, 'g'},
@@ -32,7 +35,7 @@ void parseargs(int argc, char** argv, ws2811_t* ws2811) {
 				        argv[0], ws2811->channel[0].count, ws2811->dmanum,
 				        ws2811->channel[0].gpionum,
 				        ws2811->channel[0].invert ? "LOW" : "HIGH");
-				exit(-1);
+				return EINVAL;
 			case 'D':
 				break;
 			case 'g':
@@ -44,23 +47,23 @@ void parseargs(int argc, char** argv, ws2811_t* ws2811) {
 				break;
 			case 'd':
 				if (optarg) {
-					int dma = atoi(optarg);
-					if (dma < 14) {
-						ws2811->dmanum = dma;
+					tmp = atoi(optarg);
+					if (tmp < 14) {
+						ws2811->dmanum = tmp;
 					} else {
-						printf("invalid dma %d\n", dma);
-						exit(-1);
+						fprintf(stderr, "Invalid dma %d\n", tmp);
+						return EINVAL;
 					}
 				}
 				break;
 			case 'c':
 				if (optarg) {
-					led_count = atoi(optarg);
-					if (led_count > 0) {
-						ws2811->channel[0].count = led_count;
+					tmp = atoi(optarg);
+					if (tmp > 0) {
+						ws2811->channel[0].count = tmp;
 					} else {
-						printf("invalid led count %d\n", led_count);
-						exit(-1);
+						fprintf(stderr, "Invalid led count %d\n", tmp);
+						return EINVAL;
 					}
 				}
 				break;
@@ -83,16 +86,17 @@ void parseargs(int argc, char** argv, ws2811_t* ws2811) {
 					} else if (!strncasecmp("grbw", optarg, 4)) {
 						ws2811->channel[0].strip_type = SK6812_STRIP_GRBW;
 					} else {
-						printf("invalid strip %s\n", optarg);
-						exit(-1);
+						fprintf(stderr, "Invalid strip %s\n", optarg);
+						return EINVAL;
 					}
 				}
 				break;
 			case '?':
 				/* getopt_long already reported error? */
-				exit(-1);
+				return -1;
 			default:
-				exit(-1);
+				return -1;
 		}
 	}
+	return 0;
 }
