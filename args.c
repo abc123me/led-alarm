@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ws2811.h"
+#include <ws2811.h>
 
 int parseargs(int argc, char** argv, ws2811_t* ws2811) {
 	int tmp, index, c = 0;
