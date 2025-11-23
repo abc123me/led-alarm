@@ -69,6 +69,8 @@ int main(int argc, char* argv[]) {
 	int on_time, off_time, was_on;
 	int fake_min;
 	alarm_config_t ld_cfg, cfg;
+	char *pid_fname;
+	FILE *pid_fp;
 	struct tm tms;
 	time_t now;
 
@@ -77,6 +79,9 @@ int main(int argc, char* argv[]) {
 	ld_cfg.keep_on_time = 60;
 	ld_cfg.brightness   = 255;
 	ld_cfg.overrides    = 0;
+
+	pid_fname = "/var/run/time-display.pid";
+	pid_fp = NULL;
 
 	pthread_mutex_init(&flags_mutex, NULL);
 	pthread_mutex_unlock(&flags_mutex);
@@ -99,6 +104,20 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "ws2811_init failed: %s\n",
 		        ws2811_get_return_t_str(ret));
 		return ret;
+	}
+
+	/* Create a PID file if specified */
+	if(pid_fname) {
+		pid_fp = fopen(pid_fname, "w");
+		if(pid_fp) {
+			fprintf(pid_fp, "%d", getpid());
+			fclose(pid_fp);
+			printf("PID file created at %s\n", pid_fname);
+		} else {
+			ret = 1;
+			fprintf(stderr, "Failed to make PID file at %s!\n", pid_fname);
+			goto gtfo_pidf;
+		}
 	}
 
 	was_on = cur_day = cur_min = 0;
@@ -220,6 +239,10 @@ color_override:
 	for (int i = 0; i < ledstring.channel[0].count; i++)
 		ledstring.channel[0].leds[i] = leds[i] = 0;
 	ws2811_render(&ledstring);
+
+	/* Delete the PID file if one exists */
+	if(pid_fname && pid_fp && remove(pid_fname) != 0)
+		fprintf(stderr, "Warning - Failed to remove PID file (%s)\n", pid_fname);
 
 	/* finalize */
 	free(leds);
