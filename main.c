@@ -235,6 +235,8 @@ color_override:
 		usleep(1000000);
 	}
 
+gtfo_pidf:
+
 	/* clear the leds on exit */
 	for (int i = 0; i < ledstring.channel[0].count; i++)
 		ledstring.channel[0].leds[i] = leds[i] = 0;
