@@ -6,18 +6,19 @@
 
 #include <ws2811.h>
 
-int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname) {
+int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** pid_fname) {
 	int tmp, index, c = 0;
 	static struct option longopts[] = {{"help", no_argument, 0, 'h'},
 	                                   {"dma", required_argument, 0, 'd'},
 	                                   {"gpio", required_argument, 0, 'g'},
 	                                   {"invert", no_argument, 0, 'i'},
 	                                   {"strip", required_argument, 0, 's'},
-									   {"count", required_argument, 0, 'y'},
+									   {"count", required_argument, 0, 'n'},
 									   {"version", no_argument, 0, 'v'},
-									   {"config", required_argument, 0, 'C'},
+									   {"config", required_argument, 0, 'c'},
+									   {"pid-file", required_argument, 0, 'c'},
 	                                   {0, 0, 0, 0}};
-	while (c = getopt_long(argc, argv, "C:c:d:g:his:v", longopts, &index) >= 0) {
+	while (c = getopt_long(argc, argv, "p:n:c:d:g:his:v", longopts, &index) >= 0) {
 		switch (c) {
 			case 0:
 				/* handle flag options (array's 3rd field non-0) */
@@ -25,23 +26,25 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname) {
 			case 'h':
 				fprintf(stderr,
 				        "Usage: %s \n"
-				        "-h (--help)    - this information\n"
-				        "-s (--strip)   - strip type - rgb, grb, gbr, rgbw "
+				        "-h (--help)     - this information\n"
+				        "-s (--strip)    - strip type - rgb, grb, gbr, rgbw "
 				        "(default rgb)\n"
-				        "-c (--count)   - led count (default %d)\n"
-				        "-d (--dma)     - dma channel to use (default %d)\n"
-				        "-g (--gpio)    - GPIO to use\n"
-						"                 If omitted, default is 18 (PWM0)\n"
-						"-i (--invert)  - invert pin output (pulse %s)\n",
-						"-C (--config)  - set config file (%s)\n",
+				        "-n (--count)    - led count (default %d)\n"
+				        "-d (--dma)      - dma channel to use (default %d)\n"
+				        "-g (--gpio)     - GPIO to use\n"
+						"                  If omitted, default is 18 (PWM0)\n"
+						"-i (--invert)   - invert pin output (pulse %s)\n",
+						"-c (--config)   - set config file (%s)\n",
+						"-p (--pid-file) - set pid file (%s)\n",
 				        argv[0], ws2811->channel[0].count, ws2811->dmanum,
 				        ws2811->channel[0].gpionum,
 				        ws2811->channel[0].invert ? "LOW" : "HIGH", *cfg_fname);
 				return EINVAL;
-			case 'C':
+			case 'c': case 'p':
 				if(optarg) {
 					/* pretty sure this is valid since argv is stack allocated */
-					*cfg_fname = optarg;
+					if(c == 'c') *cfg_fname = optarg;
+					if(c == 'p') *pid_fname = optarg;
 				} else {
 					fprintf(stderr, "No filename given\n");
 					return EINVAL;
@@ -67,7 +70,7 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname) {
 					}
 				}
 				break;
-			case 'c':
+			case 'n':
 				if (optarg) {
 					tmp = atoi(optarg);
 					if (tmp > 0) {

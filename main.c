@@ -60,7 +60,7 @@ ws2811_t ledstring = {
 static uint8_t flags;
 static pthread_mutex_t flags_mutex;
 
-int parseargs(int argc, char** argv, ws2811_t* ws2811, char **cfg_fname);
+int parseargs(int argc, char** argv, ws2811_t* ws2811, char **cfg_fname, char **pid_fname);
 
 static void on_interrupt(int signum);
 
@@ -216,14 +216,14 @@ int main(int argc, char* argv[]) {
 	FILE *pid_fp;
 
 	cfg_fname = "/etc/led-alarm.conf";
-	pid_fname = "/var/run/time-display.pid";
+	pid_fname = "/var/run/led-alarm.pid";
 	pid_fp = NULL;
 
 	pthread_mutex_init(&flags_mutex, NULL);
 	pthread_mutex_unlock(&flags_mutex);
 
 	/* Parse input args */
-	ret = parseargs(argc, argv, &ledstring, &cfg_fname);
+	ret = parseargs(argc, argv, &ledstring, &cfg_fname, &pid_fname);
 	if(ret) {
 		fprintf(stderr, "Failed to parse arguments!\n");
 		return ret;
