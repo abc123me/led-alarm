@@ -7,38 +7,38 @@
 #include <ws2811.h>
 
 int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** pid_fname) {
-	int tmp, index, c = 0;
-	static struct option longopts[] = {{"help", no_argument, 0, 'h'},
-	                                   {"dma", required_argument, 0, 'd'},
-	                                   {"gpio", required_argument, 0, 'g'},
-	                                   {"invert", no_argument, 0, 'i'},
-	                                   {"strip", required_argument, 0, 's'},
-									   {"count", required_argument, 0, 'n'},
-									   {"version", no_argument, 0, 'v'},
-									   {"config", required_argument, 0, 'c'},
-									   {"pid-file", required_argument, 0, 'c'},
-	                                   {0, 0, 0, 0}};
-	while (c = getopt_long(argc, argv, "p:n:c:d:g:his:v", longopts, &index) >= 0) {
+	int tmp, index = 0, c = 0;
+	struct option longopts[] = {
+		{"help",     no_argument, 0, 'h'},
+		{"invert",   no_argument, 0, 'i'},
+		{"version",  no_argument, 0, 'v'},
+		{"config",   required_argument, 0, 'c'},
+		{"dma",      required_argument, 0, 'd'},
+		{"gpio",     required_argument, 0, 'g'},
+		{"count",    required_argument, 0, 'n'},
+		{"pid-file", required_argument, 0, 'p'},
+		{"strip",    required_argument, 0, 's'},
+		{0, 0, 0, 0}};
+	while (c >= 0) {
+		c = getopt_long(argc, argv, "c:d:g:hin:p:s:v", longopts, &index);
 		switch (c) {
-			case 0:
-				/* handle flag options (array's 3rd field non-0) */
-				break;
 			case 'h':
 				fprintf(stderr,
-				        "Usage: %s \n"
-				        "-h (--help)     - this information\n"
-				        "-s (--strip)    - strip type - rgb, grb, gbr, rgbw "
-				        "(default rgb)\n"
-				        "-n (--count)    - led count (default %d)\n"
-				        "-d (--dma)      - dma channel to use (default %d)\n"
-				        "-g (--gpio)     - GPIO to use\n"
-						"                  If omitted, default is 18 (PWM0)\n"
-						"-i (--invert)   - invert pin output (pulse %s)\n",
-						"-c (--config)   - set config file (%s)\n",
+						"Usage: %s \n"
+						"-h (--help)     - this information\n"
+						"-s (--strip)    - strip type - rgb, grb, gbr, rgbw (default rgb)\n"
+						"-n (--count)    - led count (default %d)\n"
+						"-d (--dma)      - dma channel to use (default %d)\n"
+						"-g (--gpio)     - GPIO to use, default is %d (PWM0)\n"
+						"-i (--invert)   - invert pin output (pulse %s)\n"
+						"-c (--config)   - set config file (%s)\n"
 						"-p (--pid-file) - set pid file (%s)\n",
-				        argv[0], ws2811->channel[0].count, ws2811->dmanum,
-				        ws2811->channel[0].gpionum,
-				        ws2811->channel[0].invert ? "LOW" : "HIGH", *cfg_fname);
+						argv[0],
+						ws2811->channel[0].count,
+						ws2811->dmanum,
+						ws2811->channel[0].gpionum,
+						ws2811->channel[0].invert ? "LOW" : "HIGH",
+						*cfg_fname, *pid_fname);
 				return EINVAL;
 			case 'c': case 'p':
 				if(optarg) {
@@ -105,11 +105,9 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** 
 					}
 				}
 				break;
-			case '?':
-				/* getopt_long already reported error? */
-				return -1;
-			default:
-				return -1;
+			case 0: /* handle flag options (array's 3rd field non-0) */ break;
+			case '?': /* getopt_long already reported error? */ return -2;
+			default: break;
 		}
 	}
 	return 0;

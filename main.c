@@ -209,7 +209,7 @@ color_override: /* Fill the buffer with color */
 	}
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
 	int i, ret;
 	char *cfg_fname;
 	char *pid_fname;
@@ -219,13 +219,10 @@ int main(int argc, char* argv[]) {
 	pid_fname = "/var/run/led-alarm.pid";
 	pid_fp = NULL;
 
-	pthread_mutex_init(&flags_mutex, NULL);
-	pthread_mutex_unlock(&flags_mutex);
-
 	/* Parse input args */
 	ret = parseargs(argc, argv, &ledstring, &cfg_fname, &pid_fname);
 	if(ret) {
-		fprintf(stderr, "Failed to parse arguments!\n");
+		fprintf(stderr, "Failed to parse arguments (%d)!\n", ret);
 		return ret;
 	}
 
@@ -241,6 +238,8 @@ int main(int argc, char* argv[]) {
 	signal(SIGINT,  on_interrupt); /* Terminates gracefully */
 	signal(SIGUSR1, on_interrupt); /* Reloads configuration */
 	signal(SIGUSR2, on_interrupt); /* Resets fake time */
+	pthread_mutex_init(&flags_mutex, NULL);
+	pthread_mutex_unlock(&flags_mutex);
 
 	/* Create a PID file if specified */
 	if(pid_fname) {
