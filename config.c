@@ -19,7 +19,7 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 
 	memset(acfg, '\0', sizeof(alarm_config_t));
 
-	printf("\e[1;35mLoading config from %s\e[0m\n", cfg_fname);
+	printf("Loading config from %s\n", cfg_fname);
 
 	config_init(&cfg);
 
@@ -69,7 +69,7 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 					break;
 				default:
 					ret = -1;
-					fprintf(stderr, "Invalid config type in config array, bailing from try_load_config!\n");
+					fprintf(stderr, "\e[1;31mInvalid config type in config array, bailing from try_load_config!\e[0m\n");
 					goto gtfo;
 			}
 			/* print status */
@@ -89,7 +89,7 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 			}
 			/* sometimes, I wonder if I have peaked, then I write code like this */
 		}
-		printf("\e[1;32mConfig file loaded!\e[0m\n");
+		printf("Config file loaded!\n");
 		ret = CONFIG_TRUE;
 	} else {
 		fprintf(stderr, "\e[1;31mFailed to load config from %s\nError: %s\e[0m\n",
