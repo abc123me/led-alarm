@@ -78,10 +78,10 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 					if((types[i] & CFG_TYPE_TIME_TYPE) && tmp_str && (status[i] = time_from_str(tmp_str, &val, types[i])) == CONFIG_TRUE)
 						*((int*) acfgs[i]) = val;
 					acfg->overrides |= overrides[i];
-					printf("\e[1;32mSuccessfully loaded config: %s!\e[0m\n", names[i]);
+					//printf("\e[1;32mSuccessfully loaded config: %s!\e[0m\n", names[i]);
 					break;
 				case CONFIG_FALSE:
-					printf("\e[1;33mFailed to find and load config: %s (using default)!\e[0m\n", names[i]);
+					//printf("\e[1;33mFailed to find and load config: %s (using default)!\e[0m\n", names[i]);
 					break;
 				default:
 					printf("\e[1;31mUnknown status when loading config: %s!\e[0m\n", names[i]);
