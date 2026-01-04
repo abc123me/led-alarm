@@ -57,28 +57,162 @@ ws2811_t ledstring = {
 		},
 };
 
-static uint8_t flags = FLAGS_DEFAULT;
+static uint8_t flags;
 static pthread_mutex_t flags_mutex;
 
 int parseargs(int argc, char** argv, ws2811_t* ws2811);
 
 static void on_interrupt(int signum);
 
+int handle_flags(alarm_config_t *cfg, int *fake_min);
+
+int clamp255(int n) {
+	if(n < 0) return 0;
+	if(n > 255) return 255;
+	return n;
+}
+int rand_range(int min, int max) {
+	return min + (rand() % (max - min + 1));
+}
+ws2811_led_t rand_noise(ws2811_led_t led, int intensity) {
+	int r = led & 0xFF, g = (led >> 8) & 0xFF, b = (led >> 16) & 0xFF;
+	int ri = (r * intensity) / 100, gi = (g * intensity) / 100, bi = (b * intensity) / 100;
+	r = clamp255(r + rand_range(-ri, ri));
+	g = clamp255(g + rand_range(-gi, gi));
+	b = clamp255(b + rand_range(-bi, bi));
+	return r + (g << 8) + (b << 16);
+}
+void set_led_colors(int noise, int intensity, int count, ws2811_led_t *leds, ws2811_led_t led) {
+	for(int i = 0; i < count; i++) {
+		leds[i] = led;
+		if(led == 0)
+			continue;
+
+		switch(noise) {
+			case NOISE_TYPE_RANDOM:
+				leds[i] = rand_noise(led, intensity);
+				break;
+		}
+	}
+}
+int main_loop() {
+	alarm_config_t cfg;
+	int was_on = 0;
+	int fake_min = 0;
+	int toggle = 0;
+	int i;
+
+	cfg.begin_time   = 6 * 60;
+	cfg.ramp_up_time = 2 * 60;
+	cfg.keep_on_time = 60;
+	cfg.brightness   = 255;
+	cfg.overrides    = 0;
+
+	while (1) {
+		int color, cur_min, cur_day;
+		int on_time, off_time;
+
+		if (handle_flags(&cfg, &fake_min))
+			break;
+
+		if(cfg.overrides & CFG_OVERRIDE_COLOR) {
+			/* im gonna use goto for control flow, fuck you */
+			color = cfg.override_color;
+			goto color_override;
+		}
+
+		/* get the system time */
+		if(cfg.fake_time > 0 && (cfg.overrides & CFG_OVERRIDE_FAKE)) {
+			cur_min = fake_min;
+			cur_day = cfg.fake_day;
+			srand(0);
+		} else {
+			struct tm tms;
+			time_t now = time(NULL);
+			/* get the time */
+			localtime_r(&now, &tms);
+			cur_min = tms.tm_hour * 60 + tms.tm_min;
+			cur_day = tms.tm_wday;
+			srand(now);
+		}
+
+		/* if you can't read this, you're an idiot */
+		toggle = toggle ? 0 : 1;
+
+		/* figure out on / off times */
+		on_time = get_begin_time(&cfg, cur_day);
+
+		/* calculate the off_time from the on_time */
+		off_time = on_time + cfg.ramp_up_time + cfg.keep_on_time;
+		if(off_time > 1440) {
+			/* flash red for error */
+			color = toggle ? 0xFF0000 : 0x000000;
+			goto color_override;
+		}
+
+		/* update the leds, default to black */
+		if (cur_min >= on_time && cur_min < off_time) {
+			float w, wg, wb;
+
+			/* seed the color calculation */
+			w = (cur_min - on_time) / ((float) cfg.ramp_up_time);
+
+			/* make sure to clamp here for keep-on time */
+			if (w > 1.0f)
+				w = 1.0f;
+
+			/* calculate the color using some polynomial bs */
+			wg = 0.7 - ((1 - w) * 0.6f);
+			wb = 0.3 - ((1 - w) * 0.25f);
+			color |= (int)round(w * 1.0f * 255) << 16;
+			color |= (int)round(w * wg * 255) << 8;
+			color |= (int)round(w * wg * 255);
+			was_on = 1;
+		} else {
+			if(was_on && (cfg.overrides & CFG_OVERRIDE_TIME)) {
+				cfg.overrides &= ~CFG_OVERRIDE_TIME;
+				was_on = 0;
+			}
+			color = 0;
+		}
+
+color_override: /* Fill the buffer with color */
+		if(color)
+			set_led_colors(cfg.noise_type, cfg.noise_intensity, ledstring.channel[0].count, ledstring.channel[0].leds, color);
+		else for (i = 0; i < ledstring.channel[0].count; i++)
+			ledstring.channel[0].leds[i] = 0;
+
+		/* Render whatever colors in the buffer */
+		if ((i = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+			fprintf(stderr, "ws2811_render failed: %s\n",
+					ws2811_get_return_t_str(i));
+			break;
+		}
+
+		/* and wait a bit */
+		if(cfg.verbosity > 0)
+			printf("%d %02d:%02d %02d:%02d %02d:%02d #%08X\n",
+				   cur_day, cur_min / 60, cur_min % 60,
+				   on_time / 60, on_time % 60,
+				   off_time / 60, off_time % 60,
+				   color);
+
+			/* increment the fake time if applicable */
+			if(cfg.fake_time > 0 && (cfg.overrides & CFG_OVERRIDE_FAKE)) {
+				if(fake_min > (off_time + FAKE_TIME_WINDOW) || fake_min < (on_time - FAKE_TIME_WINDOW))
+					fake_min = on_time - FAKE_TIME_WINDOW;
+				else
+					fake_min += cfg.fake_time;
+			}
+
+			usleep(1000000);
+	}
+}
+
 int main(int argc, char* argv[]) {
-	int i, ret, cur_min, cur_day;
-	int on_time, off_time, was_on;
-	int fake_min;
-	alarm_config_t ld_cfg, cfg;
+	int i, ret;
 	char *pid_fname;
 	FILE *pid_fp;
-	struct tm tms;
-	time_t now;
-
-	ld_cfg.begin_time   = 6 * 60;
-	ld_cfg.ramp_up_time = 2 * 60;
-	ld_cfg.keep_on_time = 60;
-	ld_cfg.brightness   = 255;
-	ld_cfg.overrides    = 0;
 
 	pid_fname = "/var/run/time-display.pid";
 	pid_fp = NULL;
@@ -86,25 +220,25 @@ int main(int argc, char* argv[]) {
 	pthread_mutex_init(&flags_mutex, NULL);
 	pthread_mutex_unlock(&flags_mutex);
 
+	/* Parse input args */
 	ret = parseargs(argc, argv, &ledstring);
 	if(ret) {
 		fprintf(stderr, "Failed to parse arguments!\n");
 		return ret;
 	}
 
-	ws2811_led_t* leds = malloc(sizeof(ws2811_led_t) * ledstring.channel[0].count);
-	if (!leds)
-		return 1;
-
-	signal(SIGINT,  on_interrupt); /* Terminates gracefully */
-	signal(SIGUSR1, on_interrupt); /* Reloads configuration */
-	signal(SIGUSR2, on_interrupt); /* Resets fake time */
-
+	/* Initialize the LED strip */
 	if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS) {
 		fprintf(stderr, "ws2811_init failed: %s\n",
 		        ws2811_get_return_t_str(ret));
 		return ret;
 	}
+
+	/* Initialize flags and setup signal handling */
+	flags = FLAGS_DEFAULT;
+	signal(SIGINT,  on_interrupt); /* Terminates gracefully */
+	signal(SIGUSR1, on_interrupt); /* Reloads configuration */
+	signal(SIGUSR2, on_interrupt); /* Resets fake time */
 
 	/* Create a PID file if specified */
 	if(pid_fname) {
@@ -120,126 +254,13 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	was_on = cur_day = cur_min = 0;
-	fake_min = 0;
-	while (1) {
-		int color = 0;
-
-		pthread_mutex_lock(&flags_mutex);
-		/* exit main loop if ordered */
-		if((flags & FLAG_RUN_MAIN_LOOP) == 0)
-			break;
-
-		/* check if the config file needs loaded */
-		if(flags & FLAG_RELOAD_CONFIG) {
-			if(try_load_config("/etc/led-alarm.conf", &ld_cfg) == CONFIG_TRUE) {
-				memcpy(&cfg, &ld_cfg, sizeof(alarm_config_t));
-				if(ld_cfg.verbosity > 0)
-					print_config(stdout, &cfg);
-			}
-			flags &= ~FLAG_RELOAD_CONFIG;
-		}
-
-		/* Reset fake time if asked */
-		if(flags & FLAG_RESET_FAKE_TIME) {
-			fake_min = 0;
-			flags &= ~FLAG_RESET_FAKE_TIME;
-		}
-
-		pthread_mutex_unlock(&flags_mutex);
-
-		/* check if make up a time */
-		if(ld_cfg.fake_time > 0 && (ld_cfg.overrides & CFG_OVERRIDE_FAKE)) {
-			cur_min = fake_min;
-			cur_day = ld_cfg.fake_day;
-		} else {
-			now = time(NULL);
-			/* get the time */
-			localtime_r(&now, &tms);
-			cur_min = tms.tm_hour * 60 + tms.tm_min;
-			cur_day = tms.tm_wday;
-		}
-
-		/* figure out on / off times */
-		on_time = ld_cfg.begin_time;
-		if(ld_cfg.overrides) {
-			if(ld_cfg.overrides & CFG_OVERRIDE_COLOR) {
-				/* im gonna use goto for control flow, fuck you */
-				color = ld_cfg.override_color;
-				goto color_override;
-			}
-
-			if(ld_cfg.overrides & CFG_OVERRIDE_DAY_MASK)
-				if(ld_cfg.overrides & (CFG_OVERRIDE_WEEKDAY_0 << cur_day))
-					on_time = ld_cfg.begin_times[cur_day];
-
-			if(ld_cfg.overrides & CFG_OVERRIDE_TIME)
-				on_time = ld_cfg.override_time;
-		}
-		off_time = on_time + ld_cfg.ramp_up_time + ld_cfg.keep_on_time;
-
-		/* update the leds, default to black */
-		if (cur_min >= on_time && cur_min < off_time) {
-			float w, wg, wb;
-
-			/* seed the color calculation */
-			w = (cur_min - on_time) / ((float) ld_cfg.ramp_up_time);
-
-			/* make sure to clamp here for keep-on time */
-			if (w > 1.0f)
-				w = 1.0f;
-
-			/* calculate the color using some polynomial bs */
-			wg = 0.7 - ((1 - w) * 0.6f);
-			wb = 0.3 - ((1 - w) * 0.25f);
-			color |= (int)round(w * 1.0f * 255) << 16;
-			color |= (int)round(w * wg * 255) << 8;
-			color |= (int)round(w * wg * 255);
-			was_on = 1;
-		} else if(was_on && (ld_cfg.overrides & CFG_OVERRIDE_TIME)) {
-			ld_cfg.overrides &= ~CFG_OVERRIDE_TIME;
-			was_on = 0;
-		}
-
-		/* Fill the buffer with color */
-		/* TODO: Throw in some sine wave / perlin noise bs here */
-color_override:
-		for (i = 0; i < ledstring.channel[0].count; i++)
-			leds[i] = color;
-
-		/* Render whatever colors in the buffer */
-		for (i = 0; i < ledstring.channel[0].count; i++)
-			ledstring.channel[0].leds[i] = leds[i];
-		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
-			fprintf(stderr, "ws2811_render failed: %s\n",
-			        ws2811_get_return_t_str(ret));
-			break;
-		}
-
-		/* and wait a bit */
-		if(ld_cfg.verbosity > 0)
-			printf("%d %02d:%02d %02d:%02d %02d:%02d #%08X\n",
-			        cur_day, cur_min / 60, cur_min % 60,
-			        on_time / 60, on_time % 60,
-			        off_time / 60, off_time % 60,
-					color);
-
-		/* increment the fake time if applicable */
-		if(ld_cfg.fake_time > 0 && (ld_cfg.overrides & CFG_OVERRIDE_FAKE)) {
-			if(fake_min > (off_time + FAKE_TIME_WINDOW) || fake_min < (on_time - FAKE_TIME_WINDOW))
-				fake_min = on_time - FAKE_TIME_WINDOW;
-			else
-				fake_min += ld_cfg.fake_time;
-		}
-
-		usleep(1000000);
-	}
+	/* Start main loop */
+	main_loop();
 
 gtfo_pidf:
-
 	/* clear the leds on exit */
-	for (int i = 0; i < ledstring.channel[0].count; i++)
-		ledstring.channel[0].leds[i] = leds[i] = 0;
+	for (i = 0; i < ledstring.channel[0].count; i++)
+		ledstring.channel[0].leds[i] = 0;
 	ws2811_render(&ledstring);
 
 	/* Delete the PID file if one exists */
@@ -247,7 +268,6 @@ gtfo_pidf:
 		fprintf(stderr, "Warning - Failed to remove PID file (%s)\n", pid_fname);
 
 	/* finalize */
-	free(leds);
 	ws2811_fini(&ledstring);
 	printf("\n");
 	return ret;
@@ -274,4 +294,30 @@ sigstop:
 			break;
 	}
 	pthread_mutex_unlock(&flags_mutex);
+}
+
+int handle_flags(alarm_config_t *cfg, int *fake_min) {
+	pthread_mutex_lock(&flags_mutex);
+	/* exit main loop if ordered */
+	if((flags & FLAG_RUN_MAIN_LOOP) == 0)
+		return 1;
+
+	/* check if the config file needs loaded */
+	if(flags & FLAG_RELOAD_CONFIG) {
+		alarm_config_t *tmp_cfg = (alarm_config_t*) alloca(sizeof(alarm_config_t));
+		if(load_alarm_config(tmp_cfg, "/etc/led-alarm.conf") == CONFIG_TRUE) {
+			memcpy(cfg, tmp_cfg, sizeof(alarm_config_t));
+			if(cfg->verbosity > 0)
+				print_config(cfg, stdout);
+		}
+		flags &= ~FLAG_RELOAD_CONFIG;
+	}
+
+	/* Reset fake time if asked */
+	if(flags & FLAG_RESET_FAKE_TIME) {
+		*fake_min = 0;
+		flags &= ~FLAG_RESET_FAKE_TIME;
+	}
+	pthread_mutex_unlock(&flags_mutex);
+	return 0;
 }

@@ -9,9 +9,9 @@
 
 #include "config.h"
 
-static int time_from_str(char*, int*, int);
+static int time_from_str(const char*, int*, int);
 
-int try_load_config(char* cfg_fname, alarm_config_t *acfg) {
+int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 	config_t cfg;
 	int val, ret;
 
@@ -26,22 +26,22 @@ int try_load_config(char* cfg_fname, alarm_config_t *acfg) {
 	if(config_read_file(&cfg, cfg_fname) == CONFIG_TRUE) {
 		void   *acfgs[] = { &acfg->begin_time,     &acfg->ramp_up_time,   &acfg->keep_on_time,   &acfg->brightness,     &acfg->override_time,  &acfg->override_color,
 		                    &acfg->begin_times[0], &acfg->begin_times[1], &acfg->begin_times[2], &acfg->begin_times[3], &acfg->begin_times[4], &acfg->begin_times[5], &acfg->begin_times[6],
-		                    &acfg->fake_time,      &acfg->fake_day,       &acfg->verbosity,      NULL };
+		                    &acfg->fake_time,      &acfg->fake_day,       &acfg->verbosity,      &acfg->noise_type,     &acfg->noise_intensity, NULL };
 		char   *names[] = { "normal-time",         "ramp-up-time",        "keep-on-time",        "brightness",          "override-time",       "override-color",
 		                    "sunday-time",         "monday-time",         "tuesday-time",        "wednesday-time",      "thursday-time",       "friday-time",         "saturday-time",
-		                    "fake-time",           "fake-day",            "verbosity",           NULL };
+		                    "fake-time",           "fake-day",            "verbosity",           "noise-type",          "noise-intensity",     NULL };
 		int     types[] = { CFG_TYPE_TIME,         CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_TIME,         CFG_TYPE_COLOR,
 		                    CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,
-		                    CFG_TYPE_DURATION,     CFG_TYPE_DAY,          CFG_TYPE_INT,          0 };
+		                    CFG_TYPE_DURATION,     CFG_TYPE_DAY,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          0 };
 		int overrides[] = { 0,                     0,                     0,                     0,                     CFG_OVERRIDE_TIME,     CFG_OVERRIDE_COLOR,
                             CFG_OVERRIDE_SUNDAY,   CFG_OVERRIDE_MONDAY,   CFG_OVERRIDE_TUESDAY,  CFG_OVERRIDE_WEDNESDAY,CFG_OVERRIDE_THURSDAY, CFG_OVERRIDE_FRIDAY,   CFG_OVERRIDE_SATURDAY,
-		                    CFG_OVERRIDE_FAKE,     0,                     0,                     0 };
-		int    status[] = { -1,                    -1,                    -1,                    -1,                    -1,                    -1,
-                            -1,                    -1,                    -1,                    -1,                    -1,                    -1,                    -1,
-		                    -1,                    -1,                    -1,                    0 };
+		                    CFG_OVERRIDE_FAKE,     0,                     0,                     0,                     0,                     0 };
+
+		int *status = (int*) alloca(sizeof(overrides));
 		const char *tmp_str = NULL;
 
 		for(int i = 0; acfgs[i]; i++) {
+			status[i] = -1;
 			/* grab config */
 			switch(types[i] & CFG_TYPE_LIBCFG_MASK) {
 				case CFG_TYPE_INT:
@@ -81,7 +81,7 @@ int try_load_config(char* cfg_fname, alarm_config_t *acfg) {
 					printf("\e[1;32mSuccessfully loaded config: %s!\e[0m\n", names[i]);
 					break;
 				case CONFIG_FALSE:
-					printf("\e[1;33mFailed to find and load config: %s!\e[0m\n", names[i]);
+					printf("\e[1;33mFailed to find and load config: %s (using default)!\e[0m\n", names[i]);
 					break;
 				default:
 					printf("\e[1;31mUnknown status when loading config: %s!\e[0m\n", names[i]);
@@ -102,7 +102,7 @@ gtfo:
 	return ret;
 }
 
-static int time_from_str(char* str, int* val, int type) {
+static int time_from_str(const char* str, int* val, int type) {
 	char* tstr = "err";
 	int tmp;
 
@@ -136,7 +136,7 @@ static int time_from_str(char* str, int* val, int type) {
 	return CONFIG_TRUE;
 }
 
-void print_config(FILE* fp, alarm_config_t* acfg) {
+void print_config(alarm_config_t* acfg, FILE* fp) {
 	int overrides = acfg->overrides;
 	char *days[] = { "Sun", "Mon", "Tues", "Wednes", "Thurs", "Fri", "Satur", NULL };
 
@@ -146,6 +146,7 @@ void print_config(FILE* fp, alarm_config_t* acfg) {
 	fprintf(fp, "  Keep on time: %d minutes\n", acfg->keep_on_time);
 	fprintf(fp, "  Brightness:   %d%%\n", round(100.0f * (acfg->brightness / 255.0f)));
 	fprintf(fp, "  Overrides:    0x%04X\n", overrides);
+	fprintf(fp, "  Noise type:   %d @ %d\n", acfg->noise_type, acfg->noise_intensity);
 
 	if(overrides & CFG_OVERRIDE_TIME)
 		fprintf(fp, "  Custom time:  0\n", acfg->override_time);
@@ -165,4 +166,17 @@ void print_config(FILE* fp, alarm_config_t* acfg) {
 			fprintf(fp, "  %sday time: N/A\n", days[i]);
 		bit <<= 1;
 	}
+}
+
+int get_begin_time(alarm_config_t *cfg, int day) {
+	/* apply the global begin_time override */
+	if(cfg->overrides & CFG_OVERRIDE_TIME)
+		return cfg->override_time;
+
+	/* apply begin_time overrides for the current day */
+	if(cfg->overrides & CFG_OVERRIDE_DAY_MASK)
+		if(cfg->overrides & (CFG_OVERRIDE_WEEKDAY_0 << day))
+			return cfg->begin_times[day];
+
+	return cfg->begin_time;
 }
