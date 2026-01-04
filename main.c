@@ -60,11 +60,11 @@ ws2811_t ledstring = {
 static uint8_t flags;
 static pthread_mutex_t flags_mutex;
 
-int parseargs(int argc, char** argv, ws2811_t* ws2811);
+int parseargs(int argc, char** argv, ws2811_t* ws2811, char **cfg_fname);
 
 static void on_interrupt(int signum);
 
-int handle_flags(alarm_config_t *cfg, int *fake_min);
+int handle_flags(char* cfg_fname, alarm_config_t *cfg, int *fake_min);
 
 int clamp255(int n) {
 	if(n < 0) return 0;
@@ -95,7 +95,7 @@ void set_led_colors(int noise, int intensity, int count, ws2811_led_t *leds, ws2
 		}
 	}
 }
-int main_loop() {
+int main_loop(char* cfg_fname) {
 	alarm_config_t cfg;
 	int was_on = 0;
 	int fake_min = 0;
@@ -112,7 +112,7 @@ int main_loop() {
 		int color, cur_min, cur_day;
 		int on_time, off_time;
 
-		if (handle_flags(&cfg, &fake_min))
+		if (handle_flags(cfg_fname, &cfg, &fake_min))
 			break;
 
 		if(cfg.overrides & CFG_OVERRIDE_COLOR) {
@@ -211,9 +211,11 @@ color_override: /* Fill the buffer with color */
 
 int main(int argc, char* argv[]) {
 	int i, ret;
+	char *cfg_fname;
 	char *pid_fname;
 	FILE *pid_fp;
 
+	cfg_fname = "/etc/led-alarm.conf";
 	pid_fname = "/var/run/time-display.pid";
 	pid_fp = NULL;
 
@@ -221,7 +223,7 @@ int main(int argc, char* argv[]) {
 	pthread_mutex_unlock(&flags_mutex);
 
 	/* Parse input args */
-	ret = parseargs(argc, argv, &ledstring);
+	ret = parseargs(argc, argv, &ledstring, &cfg_fname);
 	if(ret) {
 		fprintf(stderr, "Failed to parse arguments!\n");
 		return ret;
@@ -255,7 +257,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	/* Start main loop */
-	main_loop();
+	main_loop(cfg_fname);
 
 gtfo_pidf:
 	/* clear the leds on exit */
@@ -296,7 +298,7 @@ sigstop:
 	pthread_mutex_unlock(&flags_mutex);
 }
 
-int handle_flags(alarm_config_t *cfg, int *fake_min) {
+int handle_flags(char* cfg_fname, alarm_config_t *cfg, int *fake_min) {
 	pthread_mutex_lock(&flags_mutex);
 	/* exit main loop if ordered */
 	if((flags & FLAG_RUN_MAIN_LOOP) == 0)
@@ -305,7 +307,7 @@ int handle_flags(alarm_config_t *cfg, int *fake_min) {
 	/* check if the config file needs loaded */
 	if(flags & FLAG_RELOAD_CONFIG) {
 		alarm_config_t *tmp_cfg = (alarm_config_t*) alloca(sizeof(alarm_config_t));
-		if(load_alarm_config(tmp_cfg, "/etc/led-alarm.conf") == CONFIG_TRUE) {
+		if(load_alarm_config(tmp_cfg, cfg_fname) == CONFIG_TRUE) {
 			memcpy(cfg, tmp_cfg, sizeof(alarm_config_t));
 			if(cfg->verbosity > 0)
 				print_config(cfg, stdout);

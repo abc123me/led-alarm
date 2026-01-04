@@ -6,17 +6,18 @@
 
 #include <ws2811.h>
 
-int parseargs(int argc, char** argv, ws2811_t* ws2811) {
+int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname) {
 	int tmp, index, c = 0;
 	static struct option longopts[] = {{"help", no_argument, 0, 'h'},
 	                                   {"dma", required_argument, 0, 'd'},
 	                                   {"gpio", required_argument, 0, 'g'},
 	                                   {"invert", no_argument, 0, 'i'},
 	                                   {"strip", required_argument, 0, 's'},
-	                                   {"count", required_argument, 0, 'y'},
-	                                   {"version", no_argument, 0, 'v'},
+									   {"count", required_argument, 0, 'y'},
+									   {"version", no_argument, 0, 'v'},
+									   {"config", required_argument, 0, 'C'},
 	                                   {0, 0, 0, 0}};
-	while (c = getopt_long(argc, argv, "c:d:g:his:v", longopts, &index) >= 0) {
+	while (c = getopt_long(argc, argv, "C:c:d:g:his:v", longopts, &index) >= 0) {
 		switch (c) {
 			case 0:
 				/* handle flag options (array's 3rd field non-0) */
@@ -30,12 +31,22 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811) {
 				        "-c (--count)   - led count (default %d)\n"
 				        "-d (--dma)     - dma channel to use (default %d)\n"
 				        "-g (--gpio)    - GPIO to use\n"
-				        "                 If omitted, default is 18 (PWM0)\n"
-				        "-i (--invert)  - invert pin output (pulse %s)\n",
+						"                 If omitted, default is 18 (PWM0)\n"
+						"-i (--invert)  - invert pin output (pulse %s)\n",
+						"-C (--config)  - set config file (%s)\n",
 				        argv[0], ws2811->channel[0].count, ws2811->dmanum,
 				        ws2811->channel[0].gpionum,
-				        ws2811->channel[0].invert ? "LOW" : "HIGH");
+				        ws2811->channel[0].invert ? "LOW" : "HIGH", *cfg_fname);
 				return EINVAL;
+			case 'C':
+				if(optarg) {
+					/* pretty sure this is valid since argv is stack allocated */
+					*cfg_fname = optarg;
+				} else {
+					fprintf(stderr, "No filename given\n");
+					return EINVAL;
+				}
+				break;
 			case 'D':
 				break;
 			case 'g':
