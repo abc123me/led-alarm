@@ -17,6 +17,7 @@
 #include <libconfig.h>
 
 #include "config.h"
+#include "utils.h"
 
 #define ARRAY_SIZE(stuff) (sizeof(stuff) / sizeof(stuff[0]))
 
@@ -65,36 +66,8 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char **cfg_fname, char **
 static void on_interrupt(int signum);
 
 int handle_flags(char* cfg_fname, alarm_config_t *cfg, int *fake_min);
+void set_led_colors(alarm_config_t *cfg, int count, ws2811_led_t *leds, ws2811_led_t led);
 
-int clamp255(int n) {
-	if(n < 0) return 0;
-	if(n > 255) return 255;
-	return n;
-}
-int rand_range(int min, int max) {
-	return min + (rand() % (max - min + 1));
-}
-ws2811_led_t rand_noise(ws2811_led_t led, int intensity) {
-	int r = led & 0xFF, g = (led >> 8) & 0xFF, b = (led >> 16) & 0xFF;
-	int ri = (r * intensity) / 100, gi = (g * intensity) / 100, bi = (b * intensity) / 100;
-	r = clamp255(r + rand_range(-ri, ri));
-	g = clamp255(g + rand_range(-gi, gi));
-	b = clamp255(b + rand_range(-bi, bi));
-	return r + (g << 8) + (b << 16);
-}
-void set_led_colors(int noise, int intensity, int count, ws2811_led_t *leds, ws2811_led_t led) {
-	for(int i = 0; i < count; i++) {
-		leds[i] = led;
-		if(led == 0)
-			continue;
-
-		switch(noise) {
-			case NOISE_TYPE_RANDOM:
-				leds[i] = rand_noise(led, intensity);
-				break;
-		}
-	}
-}
 int main_loop(char* cfg_fname) {
 	alarm_config_t cfg;
 	int was_on = 0;
@@ -109,7 +82,8 @@ int main_loop(char* cfg_fname) {
 	cfg.overrides    = 0;
 
 	while (1) {
-		int color, cur_min, cur_day;
+		ws2811_led_t color;
+		int cur_min, cur_day, cur_sec;
 		int on_time, off_time;
 
 		if (handle_flags(cfg_fname, &cfg, &fake_min))
@@ -178,7 +152,7 @@ int main_loop(char* cfg_fname) {
 
 color_override: /* Fill the buffer with color */
 		if(color)
-			set_led_colors(cfg.noise_type, cfg.noise_intensity, ledstring.channel[0].count, ledstring.channel[0].leds, color);
+			set_led_colors(&cfg, ledstring.channel[0].count, ledstring.channel[0].leds, color);
 		else for (i = 0; i < ledstring.channel[0].count; i++)
 			ledstring.channel[0].leds[i] = 0;
 
@@ -321,4 +295,30 @@ int handle_flags(char* cfg_fname, alarm_config_t *cfg, int *fake_min) {
 	}
 	pthread_mutex_unlock(&flags_mutex);
 	return 0;
+}
+
+void set_led_colors(alarm_config_t *cfg, int count, ws2811_led_t *leds, ws2811_led_t led) {
+	int noise_lvl = cfg->noise_intensity, bright = cfg->brightness;
+	int noise = cfg->noise_type, fade = cfg->line_fade;
+	for(int i = 0; i < count; i++) {
+		leds[i] = led;
+
+		switch(noise) {
+			case NOISE_TYPE_RANDOM:
+				leds[i] = rand_noise(i, leds[i], noise_lvl);
+				break;
+			case NOISE_TYPE_SINE:
+				leds[i] = sine_noise(i, leds[i], noise_lvl);
+				break;
+			case NOISE_TYPE_CLOUDS:
+				leds[i] = cloud_noise(i, leds[i], noise_lvl);
+				break;
+		}
+
+		if(bright < 255)
+			leds[i] = brightness(count - i, leds[i], fade);
+
+		if(fade)
+			leds[i] = line_fade(count - i, leds[i], fade);
+	}
 }

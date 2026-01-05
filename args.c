@@ -7,8 +7,8 @@
 #include <ws2811.h>
 
 int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** pid_fname) {
-	int tmp, index = 0, c = 0;
-	struct option longopts[] = {
+	static const char* shortopts = "c:d:g:hin:p:s:v";
+	static struct option longopts[] = {
 		{"help",     no_argument, 0, 'h'},
 		{"invert",   no_argument, 0, 'i'},
 		{"version",  no_argument, 0, 'v'},
@@ -19,8 +19,10 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** 
 		{"pid-file", required_argument, 0, 'p'},
 		{"strip",    required_argument, 0, 's'},
 		{0, 0, 0, 0}};
+
+	int tmp, index = 0, c = 0;
 	while (c >= 0) {
-		c = getopt_long(argc, argv, "c:d:g:hin:p:s:v", longopts, &index);
+		c = getopt_long(argc, argv, shortopts, longopts, &index);
 		switch (c) {
 			case 'h':
 				fprintf(stderr,
@@ -107,7 +109,7 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** 
 				break;
 			case 0: /* handle flag options (array's 3rd field non-0) */ break;
 			case '?': /* getopt_long already reported error? */ return -2;
-			default: break;
+			//default: return -1; ???
 		}
 	}
 	return 0;

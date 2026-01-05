@@ -1,6 +1,8 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
+#include <stdio.h>
+
 /* Normal overrides */
 #define CFG_OVERRIDE_TIME      0x0001 /* When set alarm time is set to this until the time is reached */
 #define CFG_OVERRIDE_COLOR     0x0002 /* When set color is set to override_color */
@@ -42,20 +44,21 @@
 
 struct alarm_config_t {
 	/* Time settings */
-	int begin_time;      /* Begin time, if one for the day isn't specified */
-	int begin_times[7];  /* Begin time per week day, if in use set flag in overrides */
-	int ramp_up_time;    /* Ramp up time in minutes */
-	int keep_on_time;    /* Keep on time in minutes */
+	int begin_time;              /* Begin time, if one for the day isn't specified */
+	int begin_times[7];          /* Begin time per week day, if in use set flag in overrides */
+	int ramp_up_time;            /* Ramp up time in minutes */
+	int keep_on_time;            /* Keep on time in minutes */
 
 	/* LED strip settings */
-	int brightness;      /* Overall brightness from 0-255 */
-	int noise_type;      /* Sets a "noise_type" when the strip is in normal operation */
-	int noise_intensity; /* Sets the intensity of the above noise type */
+	int brightness;              /* Overall brightness from 0-255 */
+	int noise_type;              /* Sets a "noise_type" when the strip is in normal operation */
+	int noise_intensity;         /* Sets the intensity of the above noise type */
+	int line_fade;               /* Sets an inverted intensity curve to handle voltage sag */
 
 	/* Overrides */
-	int overrides;       /* Which overrides are in use, zero for none */
-	int override_time;   /* Override start time, this config will be erased after the time passes */
-	int override_color;  /* When set to non-zero the color is forced to this state */
+	int overrides;               /* Which overrides are in use, zero for none */
+	int override_time;           /* Override start time, this config will be erased after the time passes */
+	ws2811_led_t override_color; /* When set to non-zero the color is forced to this state */
 
 	/* Debug features */
 	int fake_time;

@@ -42,24 +42,25 @@ large mask containing all non-user-relevent / internally used flags set when the
 #### Configuration options
  Option           | Type  | Description
 ------------------|-------|-----------------------------------------
-`normal_time`     | int   | Default led alarm begin time in minutes
-`ramp_up_time`    | int   | LED light ramp up time in minutes
-`keep_on_time`    | int   | LED light keep on time in minutes
+`normal-time`     | int   | Default led alarm begin time in minutes
+`ramp-up-time`    | int   | LED light ramp up time in minutes
+`keep-on-time`    | int   | LED light keep on time in minutes
 `brightness`      | int   | Total LED Strip brightness, 0 - 255 accepted
-`override_time`   | int   | Force a new begin time, this is auto_reset
-`override_color`  | int   | Ignore all alarms, force a specific color
-`sunday_time`     | int   | Alarm begin time for sunday
-`monday_time`     | int   | Alarm begin time for monday
-`tuesday_time`    | int   | Alarm begin time for tuesday
-`wednesday_time`  | int   | Alarm begin time for wednesday
-`thursday_time`   | int   | Alarm begin time for thursday
-`friday_time`     | int   | Alarm begin time for friday
-`saturday_time`   | int   | Alarm begin time for saturday
-`fake_time`       | int   | Fake time increment value
-`fake_day`        | int   | Fake day to use in fake_time is set
+`override-time`   | int   | Force a new begin time, this is auto_reset
+`override-color`  | int   | Ignore all alarms, force a specific color
+`sunday-time`     | int   | Alarm begin time for sunday
+`monday-time`     | int   | Alarm begin time for monday
+`tuesday-time`    | int   | Alarm begin time for tuesday
+`wednesday-time`  | int   | Alarm begin time for wednesday
+`thursday-time`   | int   | Alarm begin time for thursday
+`friday-time`     | int   | Alarm begin time for friday
+`saturday-time`   | int   | Alarm begin time for saturday
+`fake-time`       | int   | Fake time increment value
+`fake-day`        | int   | Fake day to use in fake_time is set
 `verbosity`       | int   | Verbosity level, 0 - info, 1 - verbose, 2 - debug
-`noise_type`      | int   | Type of noise to apply, 0 - Off, 1 - Random, 2 - Sine, 3 - Clouds / Perlin
-`noise_intensity` | int   | Intensity of noise from 0-100
+`noise-type`      | int   | Type of noise to apply, 0 - Off, 1 - Random, 2 - Sine, 3 - Clouds / Perlin
+`noise-intensity` | int   | Intensity of noise from 0-100
+`line-fade`       | int   | Intensity of line fade (brightness drop per led), 0-1000
 
 #### Configuration types
  Type  | In C | Description       | Example

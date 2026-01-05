@@ -7,9 +7,12 @@
 
 #include <libconfig.h>
 
+#include <ws2811.h>
+
 #include "config.h"
 
 static int time_from_str(const char*, int*, int);
+static int color_from_str(const char*, ws2811_led_t*, int);
 
 int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 	config_t cfg;
@@ -26,13 +29,13 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 	if(config_read_file(&cfg, cfg_fname) == CONFIG_TRUE) {
 		void   *acfgs[] = { &acfg->begin_time,     &acfg->ramp_up_time,   &acfg->keep_on_time,   &acfg->brightness,     &acfg->override_time,  &acfg->override_color,
 		                    &acfg->begin_times[0], &acfg->begin_times[1], &acfg->begin_times[2], &acfg->begin_times[3], &acfg->begin_times[4], &acfg->begin_times[5], &acfg->begin_times[6],
-		                    &acfg->fake_time,      &acfg->fake_day,       &acfg->verbosity,      &acfg->noise_type,     &acfg->noise_intensity, NULL };
+		                    &acfg->fake_time,      &acfg->fake_day,       &acfg->verbosity,      &acfg->noise_type,     &acfg->noise_intensity,&acfg->line_fade, NULL };
 		char   *names[] = { "normal-time",         "ramp-up-time",        "keep-on-time",        "brightness",          "override-time",       "override-color",
 		                    "sunday-time",         "monday-time",         "tuesday-time",        "wednesday-time",      "thursday-time",       "friday-time",         "saturday-time",
-		                    "fake-time",           "fake-day",            "verbosity",           "noise-type",          "noise-intensity",     NULL };
+		                    "fake-time",           "fake-day",            "verbosity",           "noise-type",          "noise-intensity",     "line-fade" };
 		int     types[] = { CFG_TYPE_TIME,         CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_TIME,         CFG_TYPE_COLOR,
 		                    CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,
-		                    CFG_TYPE_DURATION,     CFG_TYPE_DAY,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          0 };
+		                    CFG_TYPE_DURATION,     CFG_TYPE_DAY,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT, 0 };
 		int overrides[] = { 0,                     0,                     0,                     0,                     CFG_OVERRIDE_TIME,     CFG_OVERRIDE_COLOR,
                             CFG_OVERRIDE_SUNDAY,   CFG_OVERRIDE_MONDAY,   CFG_OVERRIDE_TUESDAY,  CFG_OVERRIDE_WEDNESDAY,CFG_OVERRIDE_THURSDAY, CFG_OVERRIDE_FRIDAY,   CFG_OVERRIDE_SATURDAY,
 		                    CFG_OVERRIDE_FAKE,     0,                     0,                     0,                     0,                     0 };
@@ -42,6 +45,7 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 
 		for(int i = 0; acfgs[i]; i++) {
 			status[i] = -1;
+			tmp_str = NULL;
 			/* grab config */
 			switch(types[i] & CFG_TYPE_LIBCFG_MASK) {
 				case CFG_TYPE_INT:
@@ -102,6 +106,9 @@ gtfo:
 	return ret;
 }
 
+static int color_from_str(const char* str, ws2811_led_t* val, int type) {
+
+}
 static int time_from_str(const char* str, int* val, int type) {
 	char* tstr = "err";
 	int tmp;
