@@ -4,7 +4,6 @@ $pid_fname="/var/run/led-alarm.pid";
 $def_fname="/etc/led-alarm.conf";
 $libcfgrw="libconfig-rw";
 $old_prefix="old-";
-$dry_run=false;
 
 //require_once("libconfig-rw.php");
 
@@ -63,8 +62,6 @@ function get_config(string $key, string|null $def=null, string|null $type=null):
 		$type = "auto";
 
 	$ret = exec("$libcfgrw " . escapeshellcmd($cfg_fname) . " read " . escapeshellcmd($type) . " " . escapeshellcmd($key) . " 2>&1", $out, $res);
-	//if($res !== 0)
-	//	error_log("failed to read $key from $cfg_fname - err: " . join("\n", $out));
 	if($res !== 0 || $ret === false)
 		return null;
 	else
@@ -72,9 +69,6 @@ function get_config(string $key, string|null $def=null, string|null $type=null):
 }
 function set_config(string $key, string $val, string|null $type=null): bool {
 	global $cfg_fname, $libcfgrw, $dry_run;
-
-	if($dry_run === true)
-		return true;
 
 	$res = false;
 	$out = false;
@@ -87,9 +81,6 @@ function set_config(string $key, string $val, string|null $type=null): bool {
 }
 function del_config(string $key): bool {
 	global $cfg_fname, $libcfgrw, $dry_run;
-
-	if($dry_run === true)
-		return true;
 
 	$res = false;
 	$out = false;
@@ -342,15 +333,15 @@ $fields = array(
 		if($changes) {
 			$res = false;
 			$out = array();
-			$cmd = "sudo kill -SIGUSR1 $pid 2>&1";
-			$ret = exec($cmd, $out, $res);
-			if($ret !== 0 || res !== false) {
-				$str = "Unknwon error";
+			$cmd = "sudo /bin/kill -SIGUSR1 $pid 2>&1";
+			if(exec($cmd, $out, $res) !== false) {
+				echo "EXEC \"$cmd\" OK<br>";
+			} else {
+				$str = "Unknown error";
 				if(is_array($out))
 					$str = join("<br>", $out);
 				echo "EXEC \"$cmd\" FAIL: $str<br>";
-			} else echo "EXEC \"$cmd\" OK<br>";
-
+			}
 		}
 		echo "</p>";
 	}
