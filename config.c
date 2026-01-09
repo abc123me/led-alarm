@@ -11,9 +11,6 @@
 
 #include "config.h"
 
-static int time_from_str(const char*, int*, int);
-static int color_from_str(const char*, ws2811_led_t*, int);
-
 int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 	config_t cfg;
 	int val, ret;
@@ -33,15 +30,17 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 		char   *names[] = { "normal-time",         "ramp-up-time",        "keep-on-time",        "brightness",          "override-time",       "override-color",
 		                    "sunday-time",         "monday-time",         "tuesday-time",        "wednesday-time",      "thursday-time",       "friday-time",         "saturday-time",
 		                    "fake-time",           "fake-day",            "verbosity",           "noise-type",          "noise-intensity",     "line-fade" };
-		int     types[] = { CFG_TYPE_TIME,         CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_TIME,         CFG_TYPE_COLOR,
-		                    CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,         CFG_TYPE_TIME,
-		                    CFG_TYPE_DURATION,     CFG_TYPE_DAY,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT, 0 };
+		int     types[] = { CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,
+		                    CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,         CFG_TYPE_INT,
+		                    CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT, 0 };
 		int overrides[] = { 0,                     0,                     0,                     0,                     CFG_OVERRIDE_TIME,     CFG_OVERRIDE_COLOR,
                             CFG_OVERRIDE_SUNDAY,   CFG_OVERRIDE_MONDAY,   CFG_OVERRIDE_TUESDAY,  CFG_OVERRIDE_WEDNESDAY,CFG_OVERRIDE_THURSDAY, CFG_OVERRIDE_FRIDAY,   CFG_OVERRIDE_SATURDAY,
 		                    CFG_OVERRIDE_FAKE,     0,                     0,                     0,                     0,                     0 };
 
 		int *status = (int*) alloca(sizeof(overrides));
 		const char *tmp_str = NULL;
+
+		/* TODO - Maybe, one day, use something other then an int? */
 
 		for(int i = 0; acfgs[i]; i++) {
 			status[i] = -1;
@@ -61,10 +60,7 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 					status[i] = config_lookup_bool(&cfg, names[i], (int*) acfgs[i]);
 					break;
 				case CFG_TYPE_STRING:
-					if(types[i] & CFG_TYPE_TMPSTR)
-						status[i] = config_lookup_string(&cfg, names[i], &tmp_str);
-					else
-						status[i] = config_lookup_string(&cfg, names[i], (const char**) acfgs[i]);
+					status[i] = config_lookup_string(&cfg, names[i], (const char**) acfgs[i]);
 					break;
 				case CFG_TYPE_SETTING:
 					config_setting_t *ptr = config_lookup(&cfg, names[i]);
@@ -79,8 +75,6 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 			/* print status */
 			switch(status[i]) {
 				case CONFIG_TRUE:
-					if((types[i] & CFG_TYPE_TIME_TYPE) && tmp_str && (status[i] = time_from_str(tmp_str, &val, types[i])) == CONFIG_TRUE)
-						*((int*) acfgs[i]) = val;
 					acfg->overrides |= overrides[i];
 					//printf("\e[1;32mSuccessfully loaded config: %s!\e[0m\n", names[i]);
 					break;
@@ -91,7 +85,6 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 					printf("\e[1;31mUnknown status when loading config: %s!\e[0m\n", names[i]);
 					goto gtfo;
 			}
-			/* sometimes, I wonder if I have peaked, then I write code like this */
 		}
 		printf("Config file loaded!\n");
 		ret = CONFIG_TRUE;
@@ -104,43 +97,6 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 gtfo:
 	config_destroy(&cfg);
 	return ret;
-}
-
-static int color_from_str(const char* str, ws2811_led_t* val, int type) {
-
-}
-static int time_from_str(const char* str, int* val, int type) {
-	char* tstr = "err";
-	int tmp;
-
-	puts(str);
-
-	if(type == CFG_TYPE_TIME) {
-		tstr = "time";
-		tmp = atoi(str);
-	} else if(type == CFG_TYPE_DURATION) {
-		tstr = "duration";
-		tmp = atoi(str);
-		if(tmp == 0) {
-			fprintf(stderr, "\e[1;31mFailed to parse %s, zero is not valid, unset for default!\e[0m\n", tstr);
-			return CONFIG_FALSE;
-		}
-	} else {
-		fprintf(stderr, "\e[1;31mFailed to parse time/duration from string, unknown type (0x%08X)!\e[0m\n", type);
-		return CONFIG_FALSE;
-	}
-
-	if(tmp > 1440) {
-		fprintf(stderr, "\e[1;31mFailed to parse %s, Cannot be greater then a day!\e[0m\n", tstr);
-		return CONFIG_FALSE;
-	}
-	if(tmp < 0) {
-		fprintf(stderr, "\e[1;31mFailed to parse %s, Negative values are not valid!\e[0m\n", tstr);
-		return CONFIG_FALSE;
-	}
-
-	*val = tmp;
-	return CONFIG_TRUE;
 }
 
 void print_config(alarm_config_t* acfg, FILE* fp) {

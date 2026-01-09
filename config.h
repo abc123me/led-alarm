@@ -28,13 +28,6 @@
 #define CFG_TYPE_STRING        0x0005
 #define CFG_TYPE_SETTING       0x0006
 #define CFG_TYPE_LIBCFG_MASK   0x000F
-/* our "special" types */
-#define CFG_TYPE_TMPSTR        0x0010
-#define CFG_TYPE_TIME_TYPE     0x0020
-#define CFG_TYPE_TIME          0x0001 /* 0x1035 */
-#define CFG_TYPE_DURATION      0x0001 /* 0x2035 */
-#define CFG_TYPE_DAY           0x0001 /* todo */
-#define CFG_TYPE_COLOR         0x0001 /* todo */
 
 /* TODO */
 #define NOISE_TYPE_NONE        0
