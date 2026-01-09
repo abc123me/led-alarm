@@ -69,13 +69,17 @@ large mask containing all non-user-relevent / internally used flags set when the
  time  | int  | TODO - Time value | `7:00 am`, `7:00`
  dur   | int  | TODO - Duration   | `4h`, `5m`, `2h 18m`
  color | int  | TODO - RGB Color  | `#FF0000`, `red`, `255,0,0`
-
+ 
 ### args.c
-
+ 
 Argument parsing takes place in `args.c` and uses the `getopts_long` with code shamelessly stolen from the
-rpi_ws2811x libraries test utilities. Since I didn't write most of it, this file is the only readable code.
+rpi_ws2811x libraries test utilities.
  
 Please see `args.c` for what arguments exist, or run with `-h/--help` as I couldn't be bothered to add a table.
+
+### utils.c
+ 
+Utility functions I guess?
 
 ## Web interface
 
