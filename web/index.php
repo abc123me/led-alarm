@@ -240,6 +240,7 @@ $fields = array(
 	new Field(2, "Noise type",      HtmlType::Number, FALSE, "noise-type",      LibconfigType::Int, ParseType::NoiseTypes, null, "1"),
 	new Field(2, "Noise intensity", HtmlType::Number, FALSE, "noise-intensity", LibconfigType::Int, ParseType::Int,        null, "0"),
 	new Field(2, "Line correction", HtmlType::Number, FALSE, "line-fade",       LibconfigType::Int, ParseType::Int,        null, "5"),
+	new Field(2, "RGB correction",  HtmlType::Color,  FALSE, "color-correction",LibconfigType::Int, ParseType::Int,        null, "0"),
 );
 
 ?>

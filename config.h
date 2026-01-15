@@ -47,6 +47,7 @@ struct alarm_config_t {
 	int noise_type;              /* Sets a "noise_type" when the strip is in normal operation */
 	int noise_intensity;         /* Sets the intensity of the above noise type */
 	int line_fade;               /* Sets an inverted intensity curve to handle voltage sag */
+	ws2811_led_t rgb_correct;    /* When set to non-zero the color is corrected using this as a 0-255 ratio per color */
 
 	/* Overrides */
 	int overrides;               /* Which overrides are in use, zero for none */

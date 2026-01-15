@@ -5,18 +5,10 @@
 
 #include <math.h>
 
-#define brightness_adjust_func(FN_NAME, ADJUSTMENT, MAX)        \
-	ws2811_led_t FN_NAME(int no, ws2811_led_t led, int lvl) { \
-		led_to_rgbw(led);                                       \
-		int val = (ADJUSTMENT), amax = (MAX);                   \
-		int ri = (r * val) / amax, gi = (g * val) / amax;       \
-		int bi = (b * val) / amax, wi = (w * val) / amax;       \
-		r = clamp255(r - ri);                                   \
-		g = clamp255(g - gi);                                   \
-		b = clamp255(b - bi);                                   \
-		w = clamp255(w - wi);                                   \
-		return rgbw_to_led(r, g, b, w);                         \
-	}
+/* Number of between-pixel brightness steps, for handling line fade */
+#define FINE_ADJ_MULTIPLIER 64
+
+#define FINE_ADJ_MAX (256 * FINE_ADJ_MULTIPLIER)
 
 int clamp255(int n) {
 	if(n < 0) return 0;
@@ -26,6 +18,19 @@ int clamp255(int n) {
 int rand_range(int min, int max) {
 	return min + (rand() % (max - min + 1));
 }
+
+ws2811_led_t _brightness_fine_adj(ws2811_led_t led, int lvl) {
+	led_to_rgbw(led);
+	r = (lvl * r) / FINE_ADJ_MAX;
+	g = (lvl * g) / FINE_ADJ_MAX;
+	b = (lvl * b) / FINE_ADJ_MAX;
+	w = (lvl * w) / FINE_ADJ_MAX;
+	return rgbw_to_led(r, g, b, w);
+}
+inline ws2811_led_t _brightness_adj(ws2811_led_t led, int lvl) {
+	return _brightness_fine_adj(led, lvl * FINE_ADJ_MULTIPLIER);
+}
+
 ws2811_led_t sine_noise(int no, ws2811_led_t led, int lvl) {
 	led_to_rgbw(led);
 	/* TODO */
@@ -38,14 +43,23 @@ ws2811_led_t cloud_noise(int no, ws2811_led_t led, int lvl) {
 }
 ws2811_led_t rand_noise(int no, ws2811_led_t led, int lvl) {
 	led_to_rgbw(led);
-	int ri = (r * lvl) / 100, gi = (g * lvl) / 100;
-	int bi = (b * lvl) / 100, wi = (w * lvl) / 100;
-	r = clamp255(r + rand_range(-ri, ri));
-	g = clamp255(g + rand_range(-gi, gi));
-	b = clamp255(b + rand_range(-bi, bi));
-	w = clamp255(w + rand_range(-wi, wi));
+	r = ((256 - rand_range(0, lvl)) * r) / 256;
+	g = ((256 - rand_range(0, lvl)) * g) / 256;
+	b = ((256 - rand_range(0, lvl)) * b) / 256;
+	w = ((256 - rand_range(0, lvl)) * w) / 256;
 	return rgbw_to_led(r, g, b, w);
 }
-
-brightness_adjust_func(line_fade,  lvl * no, 1000)
-brightness_adjust_func(brightness, 255 - lvl, 255)
+ws2811_led_t line_fade(int no, ws2811_led_t led, int lvl) {
+	return _brightness_fine_adj(led, FINE_ADJ_MAX - (lvl * no));
+}
+ws2811_led_t brightness(int no, ws2811_led_t led, int lvl) {
+	return _brightness_adj(led, lvl);
+}
+ws2811_led_t rgb_correct(int no, ws2811_led_t led, ws2811_led_t rgb) {
+	led_to_rgbw(led); led_to_rgbw_named(lvl_, rgb);
+	r = ((256 - lvl_r) * r) / 256;
+	g = ((256 - lvl_g) * g) / 256;
+	b = ((256 - lvl_b) * b) / 256;
+	w = ((256 - lvl_w) * w) / 256;
+	return rgbw_to_led(r, g, b, w);
+}

@@ -25,7 +25,7 @@
 #define TARGET_FREQ          WS2811_TARGET_FREQ
 #define GPIO_PIN             18
 #define DMA                  10
-#define STRIP_TYPE           WS2811_STRIP_RGB
+#define STRIP_TYPE           WS2811_STRIP_BGR
 #define LED_COUNT            80
 
 #define FLAG_RUN_MAIN_LOOP   0b00000001
@@ -67,6 +67,16 @@ static void on_interrupt(int signum);
 
 int handle_flags(char* cfg_fname, alarm_config_t *cfg, int *fake_min);
 void set_led_colors(alarm_config_t *cfg, int count, ws2811_led_t *leds, ws2811_led_t led);
+
+void render_leds(const char* str, ws2811_led_t orig, int count, ws2811_led_t *leds) {
+	led_to_rgbw_named(orig_, orig)
+	printf("%s\e[38;2;%u;%u;%um■■■■\n", str, orig_r, orig_g, orig_b);
+	for(int i = 0; i < count; i++) {
+		led_to_rgbw(leds[i])
+		printf("\e[38;2;%u;%u;%um■", r, g, b);
+	}
+	puts("\e[0m");
+}
 
 int main_loop(char* cfg_fname) {
 	alarm_config_t cfg;
@@ -126,21 +136,12 @@ int main_loop(char* cfg_fname) {
 
 		/* update the leds, default to black */
 		if (cur_min >= on_time && cur_min < off_time) {
-			float w, wg, wb;
-
-			/* seed the color calculation */
-			w = (cur_min - on_time) / ((float) cfg.ramp_up_time);
-
-			/* make sure to clamp here for keep-on time */
-			if (w > 1.0f)
-				w = 1.0f;
-
-			/* calculate the color using some polynomial bs */
-			wg = 0.7 - ((1 - w) * 0.6f);
-			wb = 0.3 - ((1 - w) * 0.25f);
-			color |= (int)round(w * 1.0f * 255) << 16;
-			color |= (int)round(w * wg * 255) << 8;
-			color |= (int)round(w * wg * 255);
+			int dtime = cur_min - on_time;
+			int ltime = cfg.ramp_up_time - dtime;
+			int total = (dtime * 256) / cfg.ramp_up_time;
+			if(total > 255) total = 255;
+			int r = total, g = total, b = total, w = total;
+			color = rgbw_to_led(r, g, b, w);
 			was_on = 1;
 		} else {
 			if(was_on && (cfg.overrides & CFG_OVERRIDE_TIME)) {
@@ -151,10 +152,15 @@ int main_loop(char* cfg_fname) {
 		}
 
 color_override: /* Fill the buffer with color */
-		if(color)
+		if(color) {
 			set_led_colors(&cfg, ledstring.channel[0].count, ledstring.channel[0].leds, color);
-		else for (i = 0; i < ledstring.channel[0].count; i++)
-			ledstring.channel[0].leds[i] = 0;
+			if(cfg.verbosity > 2)
+				render_leds("LED state (post-effects state below) pre-effects: ",
+							color, ledstring.channel[0].count, ledstring.channel[0].leds);
+		} else {
+			for (i = 0; i < ledstring.channel[0].count; i++)
+				ledstring.channel[0].leds[i] = 0;
+		}
 
 		/* Render whatever colors in the buffer */
 		if ((i = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
@@ -162,15 +168,7 @@ color_override: /* Fill the buffer with color */
 			fprintf(stderr, "ws2811_render failed: %s\n",
 					ws2811_get_return_t_str(i));
 			break;
-		} else if(cfg.verbosity > 2) {
-			puts("Rendering LEDs:");
-			for(i = 0; i < ledstring.channel[0].count; i++)
-				printf("\e[38;2;%u;%u;%um■",
-					   (ledstring.channel[0].leds[i]) & 0xFF,
-					   (ledstring.channel[0].leds[i] >> 8) & 0xFF,
-					   (ledstring.channel[0].leds[i] >> 16) & 0xFF);
-			puts("\e[0m");
-		}
+		} else
 
 		/* and wait a bit */
 		if(cfg.verbosity > 0)
@@ -188,7 +186,10 @@ color_override: /* Fill the buffer with color */
 					fake_min += cfg.fake_time;
 			}
 
-			usleep(1000000);
+			if(was_on)
+				usleep(100000);
+			else
+				usleep(1000000);
 	}
 }
 
@@ -307,27 +308,31 @@ int handle_flags(char* cfg_fname, alarm_config_t *cfg, int *fake_min) {
 }
 
 void set_led_colors(alarm_config_t *cfg, int count, ws2811_led_t *leds, ws2811_led_t led) {
-	int noise_lvl = cfg->noise_intensity, bright = cfg->brightness;
-	int noise = cfg->noise_type, fade = cfg->line_fade;
 	for(int i = 0; i < count; i++) {
 		leds[i] = led;
 
-		switch(noise) {
+		switch(cfg->noise_type) {
 			case NOISE_TYPE_RANDOM:
-				leds[i] = rand_noise(i, leds[i], noise_lvl);
+				leds[i] = rand_noise(i, leds[i], cfg->noise_intensity);
 				break;
 			case NOISE_TYPE_SINE:
-				leds[i] = sine_noise(i, leds[i], noise_lvl);
+				leds[i] = sine_noise(i, leds[i], cfg->noise_intensity);
 				break;
 			case NOISE_TYPE_CLOUDS:
-				leds[i] = cloud_noise(i, leds[i], noise_lvl);
+				leds[i] = cloud_noise(i, leds[i], cfg->noise_intensity);
 				break;
 		}
 
-		if(bright < 255)
-			leds[i] = brightness(count - i, leds[i], fade);
+		if(cfg->line_fade > 0)
+			leds[i] = line_fade(count - (i + 1), leds[i], cfg->line_fade);
 
-		if(fade)
-			leds[i] = line_fade(count - i, leds[i], fade);
+		if(cfg->line_fade < 0)
+			leds[i] = line_fade(i, leds[i], -cfg->line_fade);
+
+		if(cfg->rgb_correct)
+			leds[i] = rgb_correct(i, leds[i], cfg->rgb_correct);
+
+		if(cfg->brightness < 255)
+			leds[i] = brightness(i, leds[i], cfg->brightness);
 	}
 }

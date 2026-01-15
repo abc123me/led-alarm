@@ -28,7 +28,7 @@ int parseargs(int argc, char** argv, ws2811_t* ws2811, char** cfg_fname, char** 
 				fprintf(stderr,
 						"Usage: %s \n"
 						"-h (--help)     - this information\n"
-						"-s (--strip)    - strip type - rgb, grb, gbr, rgbw (default rgb)\n"
+						"-s (--strip)    - strip type - rgb, grb, gbr, bgr, rgbw (default bgr)\n"
 						"-n (--count)    - led count (default %d)\n"
 						"-d (--dma)      - dma channel to use (default %d)\n"
 						"-g (--gpio)     - GPIO to use, default is %d (PWM0)\n"

@@ -26,16 +26,16 @@ int load_alarm_config(alarm_config_t *acfg, char* cfg_fname) {
 	if(config_read_file(&cfg, cfg_fname) == CONFIG_TRUE) {
 		void   *acfgs[] = { &acfg->begin_time,     &acfg->ramp_up_time,   &acfg->keep_on_time,   &acfg->brightness,     &acfg->override_time,  &acfg->override_color,
 		                    &acfg->begin_times[0], &acfg->begin_times[1], &acfg->begin_times[2], &acfg->begin_times[3], &acfg->begin_times[4], &acfg->begin_times[5], &acfg->begin_times[6],
-		                    &acfg->fake_time,      &acfg->fake_day,       &acfg->verbosity,      &acfg->noise_type,     &acfg->noise_intensity,&acfg->line_fade, NULL };
+		                    &acfg->fake_time,      &acfg->fake_day,       &acfg->verbosity,      &acfg->noise_type,     &acfg->noise_intensity,&acfg->line_fade,      &acfg->rgb_correct, NULL };
 		char   *names[] = { "normal-time",         "ramp-up-time",        "keep-on-time",        "brightness",          "override-time",       "override-color",
 		                    "sunday-time",         "monday-time",         "tuesday-time",        "wednesday-time",      "thursday-time",       "friday-time",         "saturday-time",
-		                    "fake-time",           "fake-day",            "verbosity",           "noise-type",          "noise-intensity",     "line-fade" };
+		                    "fake-time",           "fake-day",            "verbosity",           "noise-type",          "noise-intensity",     "line-fade",           "color-correction" };
 		int     types[] = { CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,
 		                    CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,         CFG_TYPE_INT,
-		                    CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT, 0 };
+		                    CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,          CFG_TYPE_INT,         CFG_TYPE_INT, 0 };
 		int overrides[] = { 0,                     0,                     0,                     0,                     CFG_OVERRIDE_TIME,     CFG_OVERRIDE_COLOR,
                             CFG_OVERRIDE_SUNDAY,   CFG_OVERRIDE_MONDAY,   CFG_OVERRIDE_TUESDAY,  CFG_OVERRIDE_WEDNESDAY,CFG_OVERRIDE_THURSDAY, CFG_OVERRIDE_FRIDAY,   CFG_OVERRIDE_SATURDAY,
-		                    CFG_OVERRIDE_FAKE,     0,                     0,                     0,                     0,                     0 };
+		                    CFG_OVERRIDE_FAKE,     0,                     0,                     0,                     0,                     0,                     0 };
 
 		int *status = (int*) alloca(sizeof(overrides));
 		const char *tmp_str = NULL;
@@ -110,6 +110,8 @@ void print_config(alarm_config_t* acfg, FILE* fp) {
 	fprintf(fp, "  Brightness:   %d%%\n", round(100.0f * (acfg->brightness / 255.0f)));
 	fprintf(fp, "  Overrides:    0x%04X\n", overrides);
 	fprintf(fp, "  Noise type:   %d @ %d\n", acfg->noise_type, acfg->noise_intensity);
+	fprintf(fp, "  Line fade:    %d\n", acfg->line_fade);
+	fprintf(fp, "  RGB Correct:  #%06X\n", acfg->rgb_correct);
 
 	if(overrides & CFG_OVERRIDE_TIME)
 		fprintf(fp, "  Custom time:  0\n", acfg->override_time);
