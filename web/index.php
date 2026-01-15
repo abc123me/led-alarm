@@ -1,11 +1,13 @@
 <?php
-$cfg_fname="/var/run/led-alarm.conf";
 $pid_fname="/var/run/led-alarm.pid";
 $def_fname="/etc/led-alarm.conf";
 $libcfgrw="libconfig-rw";
 $old_prefix="old-";
 
-//require_once("libconfig-rw.php");
+require_once("libconfig-rw.php");
+
+$default_cfg = new LibconfigRW("/etc/led-alarm.conf", TRUE, TRUE);      /* enable caching and use read-only mode */
+$runtime_cfg = new LibconfigRW("/var/run/led-alarm.conf", TRUE, FALSE); /* enable caching, and use read-write mode */
 
 enum Verbosity: int {
 	case Info    = 0;
@@ -23,13 +25,6 @@ enum HtmlType: string {
 	case Number  = "number";
 	case Color   = "color";
 }
-enum ConfigType: string {
-	case Int     = "int";
-	case Int64   = "int64";
-	case Float   = "float";
-	case Boolean = "bool";
-	case String  = "string";
-}
 enum ParseType {
 	case Time;
 	case Duration;
@@ -37,55 +32,6 @@ enum ParseType {
 	case Int;
 	case Verbosity;
 	case NoiseTypes;
-}
-
-function get_config_type(string $key): string|null {
-	global $cfg_fname, $libcfgrw;
-
-	$res = false;
-	$out = array();
-	$ret = exec("$libcfgrw " . escapeshellcmd($cfg_fname) . " type " . escapeshellcmd($key) . " 2>&1", $out, $res);
-	//if($res !== 0)
-	//	error_log("failed to read type of $key from $cfg_fname - err: " . join("\n", $out));
-	if($res !== 0 || $ret === false)
-		return null;
-	else
-		return $ret;
-}
-function get_config(string $key, string|null $def=null, string|null $type=null): string|null {
-	global $cfg_fname, $libcfgrw;
-
-	$res = false;
-	$out = array();
-
-	if($type === NULL)
-		$type = "auto";
-
-	$ret = exec("$libcfgrw " . escapeshellcmd($cfg_fname) . " read " . escapeshellcmd($type) . " " . escapeshellcmd($key) . " 2>&1", $out, $res);
-	if($res !== 0 || $ret === false)
-		return null;
-	else
-		return $ret;
-}
-function set_config(string $key, string $val, string|null $type=null): bool {
-	global $cfg_fname, $libcfgrw, $dry_run;
-
-	$res = false;
-	$out = false;
-
-	if($type === null)
-		$type = "auto";
-
-	$ret = exec("$libcfgrw " . escapeshellcmd($cfg_fname) . " write " . escapeshellcmd($type) . " " . escapeshellcmd($key) . " " . escapeshellcmd($val) . " 2>&1", $out, $res);
-	return $ret !== false && $res === 0;
-}
-function del_config(string $key): bool {
-	global $cfg_fname, $libcfgrw, $dry_run;
-
-	$res = false;
-	$out = false;
-	$ret = exec("$libcfgrw " . escapeshellcmd($cfg_fname) . " delete " . escapeshellcmd($key) . "2>&1", $out, $res);
-	return $ret !== false && $res === 0;
 }
 
 function array_has_string(array $post, string $key): bool {
@@ -99,23 +45,10 @@ function array_has_string(array $post, string $key): bool {
 		return false;
 	return true;
 }
-function get_config_value(string $name, bool $useOldIfUnset=true): string|null {
-	global $old_prefix;
-	$value = get_config($name);
-	if($value !== null) {
-		return $value;
-	} else if($useOldIfUnset) {
-		$value = get_config($old_prefix . $name);
-		if($value !== null) {
-			return $value;
-		}
-	}
-	return null;
-}
-function html_to_config(string|null $val, ConfigType $cfg, HtmlType $html): string|null {
+function html_to_config(string|null $val, LibconfigType $cfg, HtmlType $html): string|null {
 	if($val === null)
 		return null;
-	if ($cfg !== ConfigType::Int) {
+	if ($cfg !== LibconfigType::Int) {
 		error_log("Config type is not an integer: $cfg\n");
 		return null;
 	}
@@ -160,10 +93,10 @@ function html_to_config(string|null $val, ConfigType $cfg, HtmlType $html): stri
 			return null;
 	}
 }
-function config_to_html(string|null $val, ConfigType $cfg, HtmlType $html): string|null {
+function config_to_html(string|null $val, LibconfigType $cfg, HtmlType $html): string|null {
 	if($val === null)
 		return null;
-	if ($cfg !== ConfigType::Int) {
+	if ($cfg !== LibconfigType::Int) {
 		error_log("Config type is not an integer: $cfg\n");
 		return null;
 	}
@@ -188,19 +121,18 @@ function config_to_html(string|null $val, ConfigType $cfg, HtmlType $html): stri
 	}
 }
 
-
 class Field {
 	public int $fset;
 	public string $disp;
 	public string $name;
 	public HtmlType $htmlType;
-	public ConfigType $configType;
+	public LibconfigType $configType;
 	public ParseType $parseType;
 	public string|null $defFieldName;
 	public string|null $defCfgHtml;
 	public bool $checkBox;
 
-	public function __construct(int $fset, string $disp, HtmlType $htmlType, bool $checkBox, string $name, ConfigType $configType, ParseType $parseType, string|null $defFieldName=null, string|null $defCfgHtml=null, string $html="") {
+	public function __construct(int $fset, string $disp, HtmlType $htmlType, bool $checkBox, string $name, LibconfigType $configType, ParseType $parseType, string|null $defFieldName=null, string|null $defCfgHtml=null, string $html="") {
 		$this->fset = $fset;
 		$this->disp = $disp;
 		$this->name = $name;
@@ -214,29 +146,34 @@ class Field {
 	}
 
 	public function print_form_input() {
-		if($this->checkBox) {
-			if(get_config_type($this->name) !== null)
-				echo "<input type=\"checkbox\" name=\"enable-" . $this->name . "\" checked></input>";
-			else
-				echo "<input type=\"checkbox\" name=\"enable-" . $this->name . "\"></input>";
-		}
+		global $default_cfg, $runtime_cfg, $old_prefix;
+
+		$html = $this->html;
+		$cval = null;
+		$has_cfg = $runtime_cfg->get_auto($this->name, $cval);
+		if(!$has_cfg)
+			if(!$runtime_cfg->get_auto($old_prefix . $this->name, $cval))
+				if(!($this->defFieldName !== null && $runtime_cfg->get_auto($this->defFieldName, $cval)))
+					if(!$default_cfg->get_auto($this->name, $cval))
+						if(!($this->defFieldName !== null && $default_cfg->get_auto($this->defFieldName, $cval)))
+							error_log("Tried all the things but STILL failed to get a value for $this->name\n");
+
+		if($this->checkBox)
+			echo "<input type=\"checkbox\" name=\"enable-$this->name\"" . ($has_cfg ? " checked" : "") . "></input>";
 
 		echo "<label for=\"" . $this->name . "\">" . $this->disp . ":</label>";
 
-		$html = $this->html;
-		$cval = get_config($this->name);
-		if($cval === null && $this->defFieldName !== null)
-			$cval = get_config($this->defFieldName);
-		if($cval === null && $this->defCfgHtml !== null)
-			$cval = $this->defCfgHtml;
-		$value = config_to_html($cval, $this->configType, $this->htmlType);
-		if($value !== null)
-			$html.=" value=\"$value\"";
+		if($cval !== null) {
+			$value = config_to_html($cval, $this->configType, $this->htmlType);
+			if($value !== null)
+				$html.=" value=\"$value\"";
+		}
 		echo "<input type=\"" . $this->htmlType->value . "\" name=\"" . $this->name . "\" $html></input>";
 		echo "</br>";
 	}
 	function handle_unchecked(array $post) {
-		global $old_prefix;
+		global $default_cfg, $runtime_cfg, $old_prefix;
+
 		$ename = "enable-" . $this->name;
 		if(array_has_string($post, $ename)) {
 			if($post["$ename"] === "on") {
@@ -246,31 +183,32 @@ class Field {
 				return true;
 			}
 		} else {
-			$type = $this->configType->value;
-			if(get_config_type($this->name) !== null) {
-				$val = get_config($this->name, null, $type);
-				set_config($old_prefix . $this->name, $val, $type);
-				del_config($this->name);
+			$val = null;
+			if($runtime_cfg->get_auto($this->name, $val)) {
+				if($val !== null && !empty($val))
+					$runtime_cfg->set_object($old_prefix . $this->name, $this->configType, $val);
+				$runtime_cfg->delete($this->name);
 				echo "$this->name: $val DELETE<br>";
 			}
 			return true;
 		}
 	}
 	public function handle_post(array $post): bool {
-		$name = $this->name;
+		global $default_cfg, $runtime_cfg, $old_prefix;
 
-		if(!array_has_string($post, $name))
+		if(!array_has_string($post, $this->name))
 			return false;
 
 		if($this->checkBox)
 			if($this->handle_unchecked($post))
 				return true;
 
-		$cval = get_config($name);
-		$pval = html_to_config($post[$name], $this->configType, $this->htmlType);
-		if($pval !== null && $pval !== $cval) {
-			echo "$name: $cval -> SET TO -> $pval<br>";
-			set_config($this->name, $pval, $this->configType->value);
+		$old_val = null;
+		$new_val = html_to_config($post[$this->name], $this->configType, $this->htmlType);
+		$runtime_cfg->get_auto($this->name, $old_val);
+		if($new_val !== null && $new_val !== $old_val) {
+			echo "$this->name: $old_val -> SET TO -> $new_val<br>";
+			$runtime_cfg->set_object($this->name, $this->configType, $new_val);
 		}
 
 		return true;
@@ -284,26 +222,26 @@ $fieldsets = array(
 );
 $fields = array(
 	/* field set, display name,     html type,        chkbx, config name,              raw type, parse type, default fname, defualt html, extra html */
-	new Field(0, "Begin time",      HtmlType::Time,   FALSE, "normal-time",     ConfigType::Int, ParseType::Time),
-	new Field(0, "Ramp up time",    HtmlType::Number, FALSE, "ramp-up-time",    ConfigType::Int, ParseType::Duration),
-	new Field(0, "Keep on time",    HtmlType::Number, FALSE, "keep-on-time",    ConfigType::Int, ParseType::Duration),
-	new Field(0, "Override color",  HtmlType::Color,  TRUE,  "override-color",  ConfigType::Int, ParseType::Color,      null, "16777215"),
-	new Field(0, "Custom time",     HtmlType::Number, TRUE,  "override-time",   ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Sunday time",     HtmlType::Time,   TRUE,  "sunday-time",     ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Monday time",     HtmlType::Time,   TRUE,  "monday-time",     ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Tuesday time",    HtmlType::Time,   TRUE,  "tuesday-time",    ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Wednesday time",  HtmlType::Time,   TRUE,  "wednesday-time",  ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Thursday time",   HtmlType::Time,   TRUE,  "thursday-time",   ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Friday time",     HtmlType::Time,   TRUE,  "friday-time",     ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Saturday time",   HtmlType::Time,   TRUE,  "saturday-time",   ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(1, "Sunday time",     HtmlType::Time,   TRUE,  "sunday-time",     ConfigType::Int, ParseType::Time,       "normal-time"),
-	new Field(2, "Brightness",      HtmlType::Number, FALSE, "brightness",      ConfigType::Int, ParseType::Int,        null, "255", "min=\"0\" max=\"255\""),
-	new Field(2, "Fake time",       HtmlType::Time,   TRUE,  "fake-time",       ConfigType::Int, ParseType::Duration,   "normal-time"),
-	new Field(2, "Fake day",        HtmlType::Number, TRUE,  "fake-day",        ConfigType::Int, ParseType::Int,        null, "0"),
-	new Field(2, "Verbosity",       HtmlType::Number, FALSE, "verbosity",       ConfigType::Int, ParseType::Verbosity,  null, "0"),
-	new Field(2, "Noise type",      HtmlType::Number, FALSE, "noise-type",      ConfigType::Int, ParseType::NoiseTypes, null, "1"),
-	new Field(2, "Noise intensity", HtmlType::Number, FALSE, "noise-intensity", ConfigType::Int, ParseType::Int,        null, "0"),
-	new Field(2, "Line correction", HtmlType::Number, FALSE, "line-fade",       ConfigType::Int, ParseType::Int,        null, "5"),
+	new Field(0, "Begin time",      HtmlType::Time,   FALSE, "normal-time",     LibconfigType::Int, ParseType::Time),
+	new Field(0, "Ramp up time",    HtmlType::Number, FALSE, "ramp-up-time",    LibconfigType::Int, ParseType::Duration),
+	new Field(0, "Keep on time",    HtmlType::Number, FALSE, "keep-on-time",    LibconfigType::Int, ParseType::Duration),
+	new Field(0, "Override color",  HtmlType::Color,  TRUE,  "override-color",  LibconfigType::Int, ParseType::Color,      null, "16777215"),
+	new Field(0, "Custom time",     HtmlType::Number, TRUE,  "override-time",   LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Sunday time",     HtmlType::Time,   TRUE,  "sunday-time",     LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Monday time",     HtmlType::Time,   TRUE,  "monday-time",     LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Tuesday time",    HtmlType::Time,   TRUE,  "tuesday-time",    LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Wednesday time",  HtmlType::Time,   TRUE,  "wednesday-time",  LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Thursday time",   HtmlType::Time,   TRUE,  "thursday-time",   LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Friday time",     HtmlType::Time,   TRUE,  "friday-time",     LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Saturday time",   HtmlType::Time,   TRUE,  "saturday-time",   LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(1, "Sunday time",     HtmlType::Time,   TRUE,  "sunday-time",     LibconfigType::Int, ParseType::Time,       "normal-time"),
+	new Field(2, "Brightness",      HtmlType::Number, FALSE, "brightness",      LibconfigType::Int, ParseType::Int,        null, "255", "min=\"0\" max=\"255\""),
+	new Field(2, "Fake time",       HtmlType::Number, TRUE,  "fake-time",       LibconfigType::Int, ParseType::Duration,   "normal-time"),
+	new Field(2, "Fake day",        HtmlType::Number, TRUE,  "fake-day",        LibconfigType::Int, ParseType::Int,        null, "0"),
+	new Field(2, "Verbosity",       HtmlType::Number, FALSE, "verbosity",       LibconfigType::Int, ParseType::Verbosity,  null, "0"),
+	new Field(2, "Noise type",      HtmlType::Number, FALSE, "noise-type",      LibconfigType::Int, ParseType::NoiseTypes, null, "1"),
+	new Field(2, "Noise intensity", HtmlType::Number, FALSE, "noise-intensity", LibconfigType::Int, ParseType::Int,        null, "0"),
+	new Field(2, "Line correction", HtmlType::Number, FALSE, "line-fade",       LibconfigType::Int, ParseType::Int,        null, "5"),
 );
 
 ?>
@@ -361,7 +299,7 @@ $fields = array(
 
 <?php
 	echo "<br><h3>Config file:</h3>";
-	echo "<p>" . str_replace("\n", "<br>", file_get_contents($cfg_fname)) . "</p>";
+	echo "<p>" . str_replace("\n", "<br>", file_get_contents("/var/run/led-alarm.conf")) . "</p>";
 ?>
 </body>
 </html>
