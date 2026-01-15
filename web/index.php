@@ -39,8 +39,6 @@ function array_has_string(array $post, string $key): bool {
 		return false;
 	if(!isset($post[$key]))
 		return false;
-	if(empty($post[$key]))
-		return false;
 	if(!is_string($post[$key]))
 		return false;
 	return true;
@@ -209,6 +207,8 @@ class Field {
 		if($new_val !== null && $new_val !== $old_val) {
 			echo "$this->name: $old_val -> SET TO -> $new_val<br>";
 			$runtime_cfg->set_object($this->name, $this->configType, $new_val);
+		} else {
+			echo "$this->name: $old_val -> NOT SET TO -> $new_val<br>";
 		}
 
 		return true;
@@ -256,6 +256,7 @@ $fields = array(
 	<h1>LED Alarm clock<h1>
 
 <?php
+	var_dump($_POST);
 	$pid = file_get_contents($pid_fname);
 	if($pid !== false && file_exists("/proc/$pid")) {
 		echo "<h2>LED Alarm clock daemon (pid=$pid) is active!</h2>";
