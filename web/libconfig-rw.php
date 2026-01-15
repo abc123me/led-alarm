@@ -41,7 +41,7 @@ class LibconfigRW {
 			if(is_array($out))
 				$str = join("<br>", $out);
 			$this->err = $str;
-			error_log("FAIL $cmd -> $str\n");
+			//error_log("FAIL $cmd -> $str\n");
 			return false;
 		}
 	}
