@@ -158,9 +158,18 @@ color_override: /* Fill the buffer with color */
 
 		/* Render whatever colors in the buffer */
 		if ((i = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+
 			fprintf(stderr, "ws2811_render failed: %s\n",
 					ws2811_get_return_t_str(i));
 			break;
+		} else if(cfg.verbosity > 2) {
+			puts("Rendering LEDs:");
+			for(i = 0; i < ledstring.channel[0].count; i++)
+				printf("\e[38;2;%u;%u;%um■",
+					   (ledstring.channel[0].leds[i]) & 0xFF,
+					   (ledstring.channel[0].leds[i] >> 8) & 0xFF,
+					   (ledstring.channel[0].leds[i] >> 16) & 0xFF);
+			puts("\e[0m");
 		}
 
 		/* and wait a bit */
