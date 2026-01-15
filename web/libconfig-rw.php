@@ -26,9 +26,6 @@ class LibconfigRW {
 			if(!is_string($arg)) {
 				$this->err = "LibconfigRW: run_libconfig argument isn't a string";
 				return false;
-			} else if(empty($arg)) {
-				$this->err = "LibconfigRW: run_libconfig argument is an empty string";
-				return false;
 			} else $cmd .= escapeshellarg($arg) . " ";
 		}
 
